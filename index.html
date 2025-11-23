@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام مدرسة بلال بن رباح للتعليم الأساسي</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Styles -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+        body { font-family: 'Tajawal', sans-serif; background-color: #f8fafc; }
+        @keyframes marquee { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        .animate-marquee { display: inline-block; white-space: nowrap; animation: marquee 25s linear infinite; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 100%; line-height: 1; text-align: center; }
+        @media print { 
+            @page { size: A4; margin: 10mm; } 
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white; } 
+            html, body, #root, main { height: auto !important; overflow: visible !important; display: block !important; position: static !important; } 
+            .print\:hidden, .print-hidden { display: none !important; } 
+            tr { page-break-inside: avoid; } 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyBrGh7JEvI9AYrQMAwd6M1gfvh-ApGJYW8",
+            authDomain: "bilal-c3b7b.firebaseapp.com",
+            projectId: "bilal-c3b7b",
+            storageBucket: "bilal-c3b7b.firebasestorage.app",
+            messagingSenderId: "326463265436",
+            appId: "1:326463265436:web:215067fafb257ae82feb59",
+            measurementId: "G-PQWZW291ZQ"
+        };
+
+        let app, auth, db;
+        let initError = null;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            console.log("Firebase Initialized");
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+            initError = e;
+        }
+
+        window.AppFirebase = { app, auth, db, initError, signInAnonymously, onAuthStateChanged, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch };
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
+    <!-- App -->
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, memo, useRef } = React;
+        const appId = 'bilal-school-app-v1';
+
+        const Icon = memo(({ name, size = 24, className, ...props }) => {
+            const icons = {
+                School: <><path d="M14 22v-4a2 2 0 1 0-4 0v4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M18 5v17"/><path d="m4 6 8-4 8 4"/><path d="M6 5v17"/><circle cx="12" cy="9" r="2"/></>,
+                Users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+                Calendar: <><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></>,
+                ClipboardList: <><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></>,
+                BarChart3: <><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></>,
+                Plus: <><path d="M5 12h14"/><path d="M12 5v14"/></>,
+                Trash2: <><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></>,
+                Save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>,
+                CheckCircle: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+                XCircle: <><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></>,
+                Clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+                Search: <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>,
+                Lock: <><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+                UserCheck: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></>,
+                LogOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></>,
+                Copy: <><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></>,
+                Printer: <><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></>,
+                FileSpreadsheet: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></>,
+                Share2: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></>,
+                UploadCloud: <><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></>,
+                FileText: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></>,
+                X: <><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>,
+                Filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>,
+                AlertTriangle: <><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+                ChevronDown: <><path d="m6 9 6 6 6-6"/></>,
+                Eraser: <><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></>,
+                Megaphone: <><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></>,
+                Edit3: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></>,
+                AlertCircle: <><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></>,
+                Award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
+                Star: <><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></>,
+                BookOpen: <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>,
+                Trophy: <><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></>,
+                UserMinus: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/></>
+            };
+            return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{icons[name] || <circle cx="12" cy="12" r="10"/>}</svg>;
+        });
+
+        const NewsTicker = memo(({ text }) => (
+            <div className="bg-emerald-800 text-white overflow-hidden relative shadow-md print-hidden h-12 flex-shrink-0 w-full border-b border-emerald-700">
+                <div className="flex items-center h-full w-full">
+                    <div className="bg-emerald-900 h-full flex items-center px-4 gap-2 z-20 shadow-xl flex-shrink-0 relative min-w-fit">
+                        <Icon name="Megaphone" size={20} className="text-yellow-400 animate-pulse" />
+                        <span className="font-bold text-sm hidden sm:inline border-l border-emerald-700 pl-3">إعلانات المدرسة:</span>
+                    </div>
+                    <div className="flex-1 overflow-hidden relative h-full flex items-center bg-emerald-800">
+                        <div className="w-full h-full relative flex items-center justify-center">
+                            <div className="animate-marquee text-base font-bold text-center whitespace-nowrap">{text && text.trim() !== "" ? text : "مرحباً بكم في مدرسة بلال بن رباح للتعليم الأساسي - نظام إدارة الحضور والغياب"}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ));
+
+        const LoginScreen = memo(({ onLogin, newsText }) => {
+            const [password, setPassword] = useState('');
+            const [showAdminInput, setShowAdminInput] = useState(false);
+            return (
+                <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
+                    <NewsTicker text={newsText} />
+                    <div className="flex-1 flex items-center justify-center p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+                            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600"><Icon name="School" size={40} /></div>
+                            <h1 className="text-2xl font-bold text-slate-800 mb-2">مدرسة بلال بن رباح</h1>
+                            <p className="text-slate-500 mb-8">نظام رصد الحضور والغياب</p>
+                            {!showAdminInput ? (
+                                <div className="space-y-4">
+                                    <button onClick={() => onLogin('teacher')} className="w-full py-4 px-6 bg-white border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 rounded-xl flex items-center gap-4 transition-all group">
+                                        <div className="bg-emerald-100 p-3 rounded-full text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors"><Icon name="UserCheck" size={24} /></div>
+                                        <div className="text-right"><div className="font-bold text-slate-800">دخول المعلمين</div><div className="text-xs text-slate-500">رصد الغياب / المجيدين</div></div>
+                                    </button>
+                                    <button onClick={() => setShowAdminInput(true)} className="w-full py-4 px-6 bg-white border-2 border-slate-100 hover:border-slate-400 hover:bg-slate-50 rounded-xl flex items-center gap-4 transition-all group">
+                                        <div className="bg-slate-100 p-3 rounded-full text-slate-600 group-hover:bg-slate-600 group-hover:text-white transition-colors"><Icon name="Lock" size={24} /></div>
+                                        <div className="text-right"><div className="font-bold text-slate-800">دخول الإدارة</div><div className="text-xs text-slate-500">التقارير وإدارة الطلاب</div></div>
+                                    </button>
+                                    <p className="text-emerald-600 font-bold mt-4 text-sm">تصميم: أ.عبدالله بن خلف الرواحي</p>
+                                </div>
+                            ) : (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <h3 className="font-bold text-slate-700 mb-4">كلمة مرور الإدارة</h3>
+                                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="أدخل كلمة المرور" className="w-full p-3 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg" autoFocus />
+                                    <div className="flex gap-2">
+                                        <button onClick={() => onLogin('admin', password)} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition-colors">دخول</button>
+                                        <button onClick={() => { setShowAdminInput(false); setPassword(''); }} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">إلغاء</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const Sidebar = memo(({ activeTab, setActiveTab, userRole, onLogout }) => (
+            <div className="w-full md:w-64 bg-slate-800 text-white flex-shrink-0 md:min-h-screen flex flex-col print-hidden">
+                <div className="p-6 border-b border-slate-700 flex items-center gap-3"><Icon name="School" size={32} className="text-emerald-400" /><div><h1 className="font-bold text-lg leading-tight">بلال بن رباح</h1><p className="text-xs text-slate-400">{userRole === 'admin' ? 'لوحة الإدارة' : 'لوحة المعلم'}</p><div className="text-[10px] text-emerald-200 mt-1 font-medium">تصميم: أ.عبدالله بن خلف الرواحي</div></div></div>
+                <nav className="flex-1 p-4 space-y-2">
+                    {userRole === 'admin' && <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="BarChart3" size={18} /> <span className="font-medium">لوحة المعلومات</span></button>}
+                    <button onClick={() => setActiveTab('attendance')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'attendance' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="ClipboardList" size={18} /> <span className="font-medium">رصد الغياب</span></button>
+                    <button onClick={() => setActiveTab('excellence')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'excellence' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Star" size={18} /> <span className="font-medium">رصد المجيدين</span></button>
+                    {userRole === 'admin' && <><button onClick={() => setActiveTab('students')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'students' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Users" size={18} /> <span className="font-medium">الطلاب</span></button><button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Calendar" size={18} /> <span className="font-medium">التقارير</span></button></>}
+                </nav>
+                <div className="p-4 border-t border-slate-700"><button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 text-red-300 hover:bg-slate-700 hover:text-red-200 rounded-lg transition-colors text-sm"><Icon name="LogOut" size={16} /> تسجيل خروج</button></div>
+            </div>
+        ));
+
+        const DashboardView = memo(({ students, attendanceRecords, newsText, actions }) => {
+            const today = new Date().toISOString().split('T')[0];
+            const [isEditingNews, setIsEditingNews] = useState(false);
+            const [tempNews, setTempNews] = useState(newsText || "");
+            useEffect(() => setTempNews(newsText || ""), [newsText]);
+            
+            const stats = useMemo(() => {
+                const recs = attendanceRecords.filter(r => r.date === today);
+                return { total: students.length, present: recs.filter(r=>r.status==='present').length, absent: recs.filter(r=>r.status==='absent').length, late: recs.filter(r=>r.status==='late').length };
+            }, [students, attendanceRecords]);
+
+            const topTeachers = useMemo(() => {
+                const s = {}; attendanceRecords.forEach(r => { if(r.teacherName?.trim()) s[r.teacherName.trim()] = (s[r.teacherName.trim()] || 0) + 1; });
+                return Object.entries(s).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            }, [attendanceRecords]);
+            
+            // Fixed: renamed variable to match usage
+            const mostAbsentStudents = useMemo(() => {
+                const s = {}; attendanceRecords.forEach(r => { if(r.status==='absent') s[r.studentId] = (s[r.studentId] || 0) + 1; });
+                return Object.entries(s).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, c]) => { const st = students.find(x=>x.id===id); return st ? {...st, count: c} : null; }).filter(Boolean);
+            }, [attendanceRecords, students]);
+
+            return (
+                <div className="space-y-6 animate-in fade-in duration-500">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-6">لوحة المعلومات</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                        <div className="bg-blue-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">إجمالي الطلاب</p><p className="text-3xl font-bold">{stats.total}</p></div><div className="opacity-20 transform scale-150"><Icon name="Users" /></div></div>
+                        <div className="bg-emerald-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">حضور اليوم</p><p className="text-3xl font-bold">{stats.present}</p></div><div className="opacity-20 transform scale-150"><Icon name="CheckCircle" /></div></div>
+                        <div className="bg-red-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">غياب اليوم</p><p className="text-3xl font-bold">{stats.absent}</p></div><div className="opacity-20 transform scale-150"><Icon name="XCircle" /></div></div>
+                        <div className="bg-amber-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">تأخير اليوم</p><p className="text-3xl font-bold">{stats.late}</p></div><div className="opacity-20 transform scale-150"><Icon name="Clock" /></div></div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 mb-6">
+                        <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Megaphone" className="text-emerald-600" size={20} /> الإعلانات</h3>{!isEditingNews && <button onClick={() => setIsEditingNews(true)} className="text-sm text-emerald-600 flex items-center gap-1"><Icon name="Edit3" size={16} /> تعديل</button>}</div>
+                        {isEditingNews ? (<div className="flex flex-col gap-2"><textarea value={tempNews} onChange={(e) => setTempNews(e.target.value)} className="w-full p-2 border rounded" /><div className="flex gap-2 justify-end"><button onClick={() => setIsEditingNews(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={() => {actions.updateNews(tempNews); setIsEditingNews(false);}} className="bg-emerald-600 text-white px-4 py-2 rounded">حفظ</button></div></div>) : (<div className="bg-slate-50 p-4 rounded-lg text-center">{newsText || "لا يوجد إعلان."}</div>)}
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border h-full"><h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><Icon name="Award" className="text-yellow-500" size={24} /> المعلمين الأكثر نشاطاً</h3><div className="space-y-3">{topTeachers.map(([n, c], i) => (<div key={n} className="flex justify-between p-3 bg-slate-50 rounded border hover:bg-blue-50"><span className="font-bold">{i+1}. {n}</span><span className="text-xs bg-white px-2 py-1 rounded border">{c} عملية</span></div>))}</div></div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border h-full"><h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><Icon name="UserMinus" className="text-red-500" size={24} /> الطلاب الأكثر غياباً</h3><div className="space-y-3">{mostAbsentStudents.map((s, i) => (<div key={s.id} className="flex justify-between p-3 bg-red-50 rounded border hover:bg-red-100"><div className="font-bold">{i+1}. {s.name} <span className="text-xs font-normal">({s.grade})</span></div><span className="text-xs bg-white px-3 py-1 rounded border font-bold text-red-600">{s.count} أيام</span></div>))}</div></div>
+                    </div>
+                </div>
+            );
+        });
+
+        const StudentsView = memo(({ students, Icon, actions, setStudents }) => {
+            const [newName, setNewName] = useState('');
+            const [newGrade, setNewGrade] = useState('');
+            const [filterGrade, setFilterGrade] = useState('');
+            const [showImport, setShowImport] = useState(false);
+            const [showDelAll, setShowDelAll] = useState(false);
+            const [showDelGrade, setShowDelGrade] = useState(false);
+            const [importText, setImportText] = useState('');
+            const [bulkGrade, setBulkGrade] = useState('');
+            const [gradeToDelete, setGradeToDelete] = useState('');
+            const [processing, setProcessing] = useState(false);
+            const nameInputRef = useRef(null);
+
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(), [students]);
+            const displayedStudents = useMemo(() => filterGrade ? students.filter(s => s.grade === filterGrade) : students, [students, filterGrade]);
+
+            const add = (e) => { 
+                e.preventDefault(); 
+                if(!newName.trim()) return; 
+                const studentData = { name: newName, grade: newGrade || 'غير محدد' };
+                setNewName(''); 
+                nameInputRef.current?.focus(); 
+                try { 
+                    actions.addStudent(studentData); 
+                } catch (err) { alert("خطأ في الإضافة"); } 
+            };
+
+            const del = (id) => { if(confirm('حذف؟')) actions.deleteStudent(id); };
+            
+            const delAll = async () => { setProcessing(true); try { await actions.batchDelete(students); setShowDelAll(false); } catch(e) { console.error(e); } setProcessing(false); };
+            const delGrade = async () => { if(!gradeToDelete) return; setProcessing(true); try { await actions.batchDelete(students.filter(s => s.grade === gradeToDelete)); setShowDelGrade(false); setGradeToDelete(''); } catch(e) { console.error(e); } setProcessing(false); };
+            
+            const bulkImport = async () => {
+                if(!importText.trim()) return;
+                const lines = importText.split('\n').filter(l => l.trim());
+                const toAdd = lines.map(l => {
+                    const p = l.includes(',') ? l.split(',') : l.includes('\t') ? l.split('\t') : [l];
+                    return { name: p[0].trim(), grade: p[1]?.trim() || bulkGrade || 'غير محدد' };
+                }).filter(s => s.name);
+                
+                setShowImport(false); setImportText(''); setBulkGrade('');
+                
+                const batchSize = 400;
+                for (let i = 0; i < toAdd.length; i += batchSize) {
+                    await actions.batchAdd(toAdd.slice(i, i + batchSize));
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-slate-800">إدارة الطلاب</h2>
+                    </div>
+
+                    {showImport && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-2xl p-6 flex flex-col gap-4 h-[80vh]"><h3 className="font-bold">استيراد</h3><input placeholder="صف موحد (اختياري)" onChange={(e)=>setBulkGrade(e.target.value)} className="p-2 border rounded"/><textarea placeholder="الأسماء..." value={importText} onChange={(e)=>setImportText(e.target.value)} className="flex-1 p-2 border rounded"/><div className="flex justify-end gap-2"><button onClick={()=>setShowImport(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={bulkImport} className="bg-emerald-600 text-white px-4 py-2 rounded">بدء الحفظ</button></div></div></div>}
+                    {showDelAll && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><div className="text-red-600 font-bold mb-4">حذف الكل؟</div><button onClick={delAll} disabled={processing} className="bg-red-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'تأكيد'}</button><button onClick={()=>setShowDelAll(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
+                    {showDelGrade && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><h3 className="font-bold mb-4">حذف صف</h3><select onChange={(e)=>setGradeToDelete(e.target.value)} className="w-full p-2 border mb-4"><option value="">اختر</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><button onClick={delGrade} disabled={processing} className="bg-amber-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'حذف'}</button><button onClick={()=>setShowDelGrade(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
+
+                    <div className="grid lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border flex gap-4 items-end">
+                            <div className="flex-1">
+                                <label className="text-xs font-bold">الاسم</label>
+                                <input ref={nameInputRef} value={newName} onChange={(e)=>setNewName(e.target.value)} className="w-full p-2 border rounded" placeholder="اسم الطالب"/>
+                            </div>
+                            <div className="w-40 relative">
+                                <label className="text-xs font-bold">الصف</label>
+                                <input list="grades" value={newGrade} onChange={(e)=>setNewGrade(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="اختر"/>
+                                <datalist id="grades">{uniqueGrades.map(g=><option key={g} value={g}/>)}</datalist>
+                                {newGrade && <button onClick={()=>setNewGrade('')} className="absolute left-2 top-8 text-slate-400 hover:text-red-500 bg-white rounded-full p-0.5"><Icon name="X" size={14}/></button>}
+                            </div>
+                            <button onClick={add} className="bg-emerald-600 text-white px-6 py-2 rounded font-bold">إضافة</button>
+                        </div>
+                        <div className="bg-emerald-50 p-6 rounded-xl border flex justify-center items-center"><button onClick={()=>setShowImport(true)} className="bg-white text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg font-bold flex items-center gap-2"><Icon name="UploadCloud" size={18}/> استيراد</button></div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <div className="p-4 border-b bg-slate-50 flex flex-wrap gap-4 justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold">الطلاب ({displayedStudents.length})</span>
+                                <select className="text-sm p-1 border rounded bg-white" value={filterGrade} onChange={e => setFilterGrade(e.target.value)}><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select>
+                            </div>
+                            <div className="flex gap-2">{students.length>0 && <><button onClick={()=>setShowDelGrade(true)} className="text-xs bg-amber-50 text-amber-700 px-3 py-1 border border-amber-200 rounded">حذف صف</button><button onClick={()=>setShowDelAll(true)} className="text-xs bg-red-50 text-red-700 px-3 py-1 border border-red-200 rounded">حذف الكل</button></>}</div>
+                        </div>
+                        <div className="divide-y max-h-[60vh] overflow-y-auto">
+                            {displayedStudents.map(s=>(
+                                <div key={s.id} className="p-4 flex justify-between hover:bg-slate-50">
+                                    <div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">{s.grade}</div></div>
+                                    <button onClick={()=>del(s.id)} className="text-red-400"><Icon name="Trash2" size={18}/></button>
+                                </div>
+                            ))}
+                            {displayedStudents.length === 0 && <div className="p-8 text-center text-slate-400">لا يوجد طلاب للعرض</div>}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const AttendanceView = memo(({ students, attendanceRecords, userRole, teacherState, setTeacherState, actions, Icon }) => {
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [search, setSearch] = useState('');
+            const sessions = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة"];
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(), [students]);
+            const localAttendance = useMemo(() => { const m={}; attendanceRecords.filter(r=>r.date===date).forEach(r=>m[r.studentId]=r.status); return m; }, [date, attendanceRecords]);
+            const isComplete = Boolean(teacherState.name?.trim() && teacherState.grade && teacherState.session);
+            const canMark = userRole === 'admin' || isComplete;
+            const filtered = useMemo(() => { if (userRole === 'teacher' && !teacherState.grade) return []; return students.filter(s => s.name.includes(search) && (teacherState.grade ? s.grade === teacherState.grade : true)); }, [students, search, teacherState.grade, userRole]);
+            
+            const batch = (status) => { if (!canMark || !filtered.length) return; const items = filtered.map(s => ({ id: `${date}_${s.id}`, data: { date, studentId: s.id, status, teacherName: teacherState.name, grade: teacherState.grade, session: teacherState.session } })); actions.batchAttendance(items); };
+            const copy = () => { if (!isComplete) return alert("أكمل البيانات"); const ids = new Set(filtered.map(s => s.id)); const abs = students.filter(s => ids.has(s.id) && localAttendance[s.id] === 'absent'); const lat = students.filter(s => ids.has(s.id) && localAttendance[s.id] === 'late'); const t = `*مدرسة بلال بن رباح*\nالتاريخ: ${date}\nالمعلم: ${teacherState.name}\nالصف: ${teacherState.grade}\nالحصة: ${teacherState.session}\n\n🛑 *غياب (${abs.length}):*\n${abs.map(s => s.name).join('\n') || 'لا يوجد'}\n\n⚠️ *تأخير (${lat.length}):*\n${lat.map(s => s.name).join('\n') || 'لا يوجد'}`; const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); alert("تم النسخ"); };
+
+            return (
+                <div className="space-y-6">
+                    {userRole === 'teacher' && <div className="bg-white p-4 rounded shadow border border-emerald-100 grid grid-cols-2 gap-4"><div><label className="text-xs font-bold">المعلم *</label><input value={teacherState.name} onChange={(e)=>setTeacherState(p=>({...p,name:e.target.value}))} className="w-full p-2 border rounded"/></div><div><label className="text-xs font-bold">الحصة *</label><select value={teacherState.session} onChange={(e)=>setTeacherState(p=>({...p,session:e.target.value}))} className="w-full p-2 border rounded"><option value="">اختر</option>{sessions.map(s=><option key={s} value={s}>{s}</option>)}</select></div></div>}
+                    <div className="flex justify-between gap-2 items-center"><h2 className="text-xl font-bold">رصد الغياب</h2><div className="flex gap-2"><input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="p-2 border rounded"/>{userRole==='teacher'&&<button onClick={copy} disabled={!isComplete} className={`px-4 py-2 rounded text-white font-bold ${!isComplete?'bg-slate-400':'bg-emerald-600'}`}>نسخ</button>}</div></div>
+                    <div className="bg-white p-4 rounded shadow border flex gap-4 items-center sticky top-0 z-10"><select value={teacherState.grade} onChange={(e)=>setTeacherState(p=>({...p,grade:e.target.value}))} className="p-2 border rounded w-1/4"><option value="">{userRole==='teacher'?'اختر الصف *':'الكل'}</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><input placeholder="بحث..." value={search} onChange={(e)=>setSearch(e.target.value)} className="p-2 border rounded flex-1"/><div className="flex gap-2"><button onClick={()=>batch('present')} disabled={!canMark} className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded">تحضير</button><button onClick={()=>batch('absent')} disabled={!canMark} className="px-3 py-1 bg-red-100 text-red-700 rounded">تغييب</button></div></div>
+                    <div className="bg-white rounded shadow border overflow-hidden"><div className="divide-y">{filtered.length===0?<div className="p-8 text-center text-slate-400">لا يوجد طلاب</div>:filtered.map(s=>(<div key={s.id} className={`p-4 flex justify-between items-center ${localAttendance[s.id]==='absent'?'bg-red-50':''}`}><div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">{s.grade}</div></div><div className="flex gap-1">{['present','late','absent'].map(st=>(<button key={st} onClick={()=>actions.updateAttendance(`${date}_${s.id}`, { date, studentId: s.id, status: st, teacherName: teacherState.name, grade: teacherState.grade, session: teacherState.session })} disabled={!canMark} className={`p-2 rounded border ${localAttendance[s.id]===st?(st==='present'?'bg-emerald-600 text-white':st==='late'?'bg-amber-500 text-white':'bg-red-500 text-white'):'bg-white text-slate-500'} disabled:opacity-50`}><Icon name={st==='present'?'CheckCircle':st==='late'?'Clock':'XCircle'} size={18}/></button>))}</div></div>))}</div></div>
+                </div>
+            );
+        });
+
+        const ExcellenceView = ({ students, userRole, teacherState, setTeacherState, excellenceRecords, Icon, actions }) => {
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [search, setSearch] = useState('');
+            const subjects = ["التربية الإسلامية", "اللغة العربية", "الرياضيات", "العلوم", "اللغة الإنجليزية", "الدراسات الاجتماعية", "تقنية المعلومات", "الرياضة المدرسية", "الفنون التشكيلية", "الموسيقى", "المهارات الحياتية", "التاريخ", "الجغرافيا", "الفيزياء", "الكيمياء", "الأحياء"];
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(), [students]);
+            const excellenceData = useMemo(() => { const d={}; excellenceRecords.forEach(r=>d[`${r.date}_${r.subject}_${r.studentId}`]=true); return d; }, [excellenceRecords]);
+            const filtered = useMemo(() => { if (!teacherState.grade) return []; return students.filter(s => s.name.includes(search) && s.grade === teacherState.grade); }, [students, search, teacherState.grade]);
+            const toggle = async (sid) => { if (!teacherState.name || !teacherState.grade || !teacherState.subject) return alert("البيانات ناقصة"); const key = `${date}_${teacherState.subject}_${sid}`; await actions.toggleExcellence(key, { date, studentId: sid, studentName: students.find(s=>s.id===sid).name, grade: teacherState.grade, subject: teacherState.subject, teacherName: teacherState.name }, excellenceData[key]); };
+
+            return (
+                <div className="space-y-6">
+                    <div className="bg-white p-4 rounded shadow border grid grid-cols-3 gap-4"><div><label className="text-xs font-bold">المعلم</label><input value={teacherState.name} onChange={(e)=>setTeacherState(p=>({...p,name:e.target.value}))} className="w-full p-2 border rounded"/></div><div><label className="text-xs font-bold">المادة</label><select value={teacherState.subject} onChange={(e)=>setTeacherState(p=>({...p,subject:e.target.value}))} className="w-full p-2 border rounded"><option value="">اختر</option>{subjects.map(s=><option key={s} value={s}>{s}</option>)}</select></div><div><label className="text-xs font-bold">التاريخ</label><input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="w-full p-2 border rounded"/></div></div>
+                    <div className="bg-white p-4 rounded shadow border flex gap-4 items-center sticky top-0 z-10"><select value={teacherState.grade} onChange={(e)=>setTeacherState(p=>({...p,grade:e.target.value}))} className="p-2 border rounded w-1/3"><option value="">{userRole==='teacher'?'اختر الصف':'الكل'}</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><input placeholder="بحث..." value={search} onChange={(e)=>setSearch(e.target.value)} className="p-2 border rounded flex-1"/></div>
+                    <div className="bg-white rounded shadow border overflow-hidden"><div className="divide-y">{filtered.length===0?<div className="p-8 text-center text-slate-400">الرجاء اختيار الصف والمادة</div>:filtered.map(s=>(<div key={s.id} className={`p-4 flex justify-between items-center ${excellenceData[`${date}_${teacherState.subject}_${s.id}`]?'bg-yellow-50':''}`}><div className="font-bold">{s.name}</div><button onClick={()=>toggle(s.id)} className={`p-2 rounded-full ${excellenceData[`${date}_${teacherState.subject}_${s.id}`]?'text-yellow-500':'text-slate-300 hover:text-yellow-400'}`}><Icon name="Star" size={24} fill="currentColor"/></button></div>))}</div></div>
+                </div>
+            );
+        };
+
+        const ReportsView = memo(({ students, attendanceRecords, excellenceRecords }) => {
+            const [type, setType] = useState('attendance');
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [grade, setGrade] = useState('');
+            const [subject, setSubject] = useState('');
+            const [minSub, setMinSub] = useState(4);
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(), [students]);
+            const subjects = ["التربية الإسلامية", "اللغة العربية", "الرياضيات", "العلوم", "اللغة الإنجليزية", "الدراسات الاجتماعية", "تقنية المعلومات", "الرياضة المدرسية", "الفنون التشكيلية", "الموسيقى", "المهارات الحياتية", "التاريخ", "الجغرافيا", "الفيزياء", "الكيمياء", "الأحياء"];
+
+            const attRecs = attendanceRecords.filter(r => r.date === date);
+            const abs = attRecs.filter(r => r.status === 'absent').map(r => students.find(s => s.id === r.studentId)).filter(Boolean).filter(s => grade ? s.grade === grade : true);
+            const lat = attRecs.filter(r => r.status === 'late').map(r => students.find(s => s.id === r.studentId)).filter(Boolean).filter(s => grade ? s.grade === grade : true);
+            const excRecs = excellenceRecords.filter(r => r.date === date).filter(r => grade ? r.grade === grade : true).filter(r => subject ? r.subject === subject : true);
+            const multiExc = useMemo(() => {
+                const counts = {}; excellenceRecords.forEach(r => { if (!counts[r.studentId]) counts[r.studentId] = new Set(); counts[r.studentId].add(r.subject); });
+                return Object.keys(counts).map(id => { const s = students.find(st => st.id === id); return s && counts[id].size >= minSub ? { ...s, count: counts[id].size, subs: Array.from(counts[id]).join(', ') } : null; }).filter(Boolean).filter(s => grade ? s.grade === grade : true).sort((a,b) => b.count - a.count);
+            }, [excellenceRecords, students, minSub, grade]);
+            
+            const exportCsv = () => {
+                let h, r, f;
+                if (type === 'attendance') { h = ["Date","Name","Grade","Status"]; r = [...abs.map(s=>[date,s.name,s.grade,"Absent"]), ...lat.map(s=>[date,s.name,s.grade,"Late"])]; f = `Att_${date}.csv`; }
+                else if (type === 'excellence') { h = ["Date","Name","Grade","Subject","Teacher"]; r = excRecs.map(x=>[x.date,x.studentName,x.grade,x.subject,x.teacherName]); f = `Exc_${date}.csv`; }
+                else { h = ["Name","Grade","Count","Subjects"]; r = multiExc.map(s=>[s.name,s.grade,s.count,s.subs]); f = `Multi_${minSub}.csv`; }
+                if(!r.length) return alert("Empty");
+                const csv = "\uFEFF" + [h, ...r].map(e => e.join(",")).join("\n");
+                const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = f; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex flex-wrap gap-2 print-hidden"><button onClick={()=>setType('attendance')} className={`px-4 py-2 rounded font-bold ${type==='attendance'?'bg-emerald-600 text-white':'bg-white'}`}>غياب</button><button onClick={()=>setType('excellence')} className={`px-4 py-2 rounded font-bold ${type==='excellence'?'bg-purple-600 text-white':'bg-white'}`}>مجيدين</button><button onClick={()=>setType('multi_excellence')} className={`px-4 py-2 rounded font-bold ${type==='multi_excellence'?'bg-amber-500 text-white':'bg-white'}`}>متفوقين</button></div>
+                    <div className="flex flex-wrap gap-2 print-hidden items-center">{type!=='multi_excellence'&&<input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="p-2 border rounded bg-white"/>}<select value={grade} onChange={(e)=>setGrade(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select>{type==='excellence'&&<select value={subject} onChange={(e)=>setSubject(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل المواد</option>{subjects.map(s=><option key={s} value={s}>{s}</option>)}</select>}{type==='multi_excellence'&&<select value={minSub} onChange={(e)=>setMinSub(Number(e.target.value))} className="p-2 border rounded bg-amber-50 font-bold"><option value="2">مادتين+</option><option value="3">3+</option><option value="4">4+</option></select>}<button onClick={exportCsv} className="bg-green-700 text-white px-4 py-2 rounded">CSV</button><button onClick={()=>{window.focus();setTimeout(()=>window.print(),100)}} className="bg-slate-800 text-white px-4 py-2 rounded">طباعة</button></div>
+                    <div className="hidden print:block text-center text-xl font-bold mb-4">تقرير - {date}</div>
+                    {type==='attendance'&&<div className="grid md:grid-cols-2 gap-6"><div className="bg-white rounded shadow border-red-200"><div className="p-4 border-b bg-red-50 font-bold text-red-800">الغياب ({abs.length})</div><div className="p-4">{abs.length===0?'لا يوجد':abs.map(s=><div key={s.id} className="flex justify-between border-b py-2 last:border-0"><span>{s.name}</span><span className="text-sm text-slate-400">{s.grade}</span></div>)}</div></div><div className="bg-white rounded shadow border-amber-200"><div className="p-4 border-b bg-amber-50 font-bold text-amber-800">التأخير ({lat.length})</div><div className="p-4">{lat.length===0?'لا يوجد':lat.map(s=><div key={s.id} className="flex justify-between border-b py-2 last:border-0"><span>{s.name}</span><span className="text-sm text-slate-400">{s.grade}</span></div>)}</div></div></div>}
+                    {type==='excellence'&&<div className="bg-white rounded shadow border-purple-200"><div className="p-4 border-b bg-purple-50 font-bold text-purple-800">المجيدين ({excRecs.length})</div><div className="p-4"><table className="w-full text-right text-sm"><thead><tr className="border-b"><th>الاسم</th><th>الصف</th><th>المادة</th><th>المعلم</th></tr></thead><tbody>{excRecs.map((r,i)=><tr key={i} className="border-b last:border-0 py-2"><td>{r.studentName}</td><td>{r.grade}</td><td>{r.subject}</td><td>{r.teacherName}</td></tr>)}</tbody></table></div></div>}
+                    {type==='multi_excellence'&&<div className="bg-white rounded shadow border-amber-200"><div className="p-4 border-b bg-amber-50 font-bold text-amber-800">المتفوقين ({multiExc.length})</div><div className="p-4"><table className="w-full text-right text-sm"><thead><tr className="border-b"><th>الاسم</th><th>الصف</th><th>العدد</th><th>المواد</th></tr></thead><tbody>{multiExc.map((r,i)=><tr key={i} className="border-b last:border-0 py-2"><td>{r.name}</td><td>{r.grade}</td><td className="font-bold text-center">{r.count}</td><td className="text-xs text-slate-500">{r.subs}</td></tr>)}</tbody></table></div></div>}
+                </div>
+            );
+        });
+
+        // --- Main App ---
+        const SchoolAttendanceApp = () => {
+            const [firebaseReady, setFirebaseReady] = useState(false);
+            const [user, setUser] = useState(null);
+            const [userRole, setUserRole] = useState(null);
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [students, setStudents] = useState([]);
+            const [attendanceRecords, setAttendanceRecords] = useState([]);
+            const [excellenceRecords, setExcellenceRecords] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [newsText, setNewsText] = useState('');
+            const [teacherState, setTeacherState] = useState({ name: '', grade: '', session: '', subject: '' });
+            const [authError, setAuthError] = useState(null);
+            const [isOffline, setIsOffline] = useState(false);
+            
+            useEffect(() => {
+                if (window.AppFirebase) setFirebaseReady(true);
+                else window.addEventListener('firebase-ready', () => setFirebaseReady(true));
+            }, []);
+
+            useEffect(() => {
+                if (!firebaseReady) return;
+                const { auth, signInAnonymously, onAuthStateChanged } = window.AppFirebase;
+                
+                const timer = setTimeout(() => { if(loading) setLoading(false); }, 4000);
+                signInAnonymously(auth).catch(err => {
+                    console.error(err);
+                    setAuthError("وضع غير متصل"); setIsOffline(true); setUser({uid:'offline', isAnonymous:true});
+                });
+                return () => { clearTimeout(timer); onAuthStateChanged(auth, (u) => { if(!isOffline) setUser(u); }); };
+            }, [firebaseReady]);
+
+            useEffect(() => {
+                if (!user) return;
+                if (isOffline) {
+                    setStudents(JSON.parse(localStorage.getItem('students')||'[]'));
+                    setAttendanceRecords(JSON.parse(localStorage.getItem('attendance')||'[]'));
+                    setExcellenceRecords(JSON.parse(localStorage.getItem('excellence')||'[]'));
+                    setNewsText(localStorage.getItem('newsText')||'');
+                    setLoading(false); return;
+                }
+                const { db, collection, onSnapshot, doc } = window.AppFirebase;
+                const u1 = onSnapshot(collection(db,'artifacts',appId,'public','data','students'), s => setStudents(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name,'ar'))));
+                const u2 = onSnapshot(collection(db,'artifacts',appId,'public','data','attendance'), s => setAttendanceRecords(s.docs.map(d=>({id:d.id,...d.data()}))));
+                const u3 = onSnapshot(collection(db,'artifacts',appId,'public','data','excellence'), s => { setExcellenceRecords(s.docs.map(d=>({id:d.id,...d.data()}))); setLoading(false); });
+                const u4 = onSnapshot(doc(db,'artifacts',appId,'public','data','settings','config'), s => s.exists() && setNewsText(s.data().newsText));
+                return () => { u1(); u2(); u3(); u4(); };
+            }, [user, isOffline]);
+
+            const handleLogin = (role, password = "") => {
+                if (role === 'admin') {
+                    if (password === 'akm1983') { setUserRole('admin'); setActiveTab('dashboard'); } 
+                    else { alert('كلمة المرور خاطئة'); }
+                } else { setUserRole('teacher'); setActiveTab('attendance'); }
+            };
+
+            const handleLogout = () => { setUserRole(null); setActiveTab('dashboard'); setTeacherState({ name: '', grade: '', session: '', subject: '' }); };
+
+            const actions = {
+                addStudent: async (d) => {
+                    const s = {id:Date.now().toString(), ...d};
+                    // Optimistic for view
+                    setStudents(prev => [...prev, s].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
+                    if(isOffline){ localStorage.setItem('students',JSON.stringify([...students,s])); return; }
+                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; 
+                    await setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()});
+                },
+                batchAdd: async (list) => {
+                    const newItems = list.map(i=>({id:Date.now().toString()+Math.random(),...i}));
+                    setStudents(prev => [...prev, ...newItems].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
+                    if(isOffline) { localStorage.setItem('students',JSON.stringify([...students, ...newItems])); return; }
+                    const {db,collection,doc,writeBatch,serverTimestamp} = window.AppFirebase;
+                    const batch = writeBatch(db);
+                    list.forEach(i => batch.set(doc(collection(db,'artifacts',appId,'public','data','students')), {...i, createdAt: serverTimestamp()}));
+                    await batch.commit();
+                },
+                deleteStudent: async (id) => {
+                    setStudents(prev => prev.filter(s=>s.id!==id));
+                    if(isOffline){ localStorage.setItem('students',JSON.stringify(students.filter(s=>s.id!==id))); return; }
+                    const {db,doc,deleteDoc} = window.AppFirebase; await deleteDoc(doc(db,'artifacts',appId,'public','data','students',id));
+                },
+                batchDelete: async (list) => {
+                    setStudents(prev => prev.filter(s => !list.find(d => d.id === s.id)));
+                    if(isOffline) { localStorage.setItem('students',JSON.stringify(students.filter(s => !list.find(d => d.id === s.id)))); return; }
+                    const {db,doc,writeBatch} = window.AppFirebase;
+                    const batchSize = 400; 
+                    for(let i=0;i<list.length;i+=batchSize) {
+                        const batch = writeBatch(db);
+                        list.slice(i,i+batchSize).forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
+                        await batch.commit();
+                    }
+                },
+                updateAttendance: async (did, d) => {
+                    if(isOffline){ const n=[...attendanceRecords.filter(r=>`${r.date}_${r.studentId}`!==did),{...d,id:did}]; setAttendanceRecords(n); localStorage.setItem('attendance',JSON.stringify(n)); return; }
+                    const {db,doc,setDoc,serverTimestamp} = window.AppFirebase; await setDoc(doc(db,'artifacts',appId,'public','data','attendance',did), {...d, updatedAt: serverTimestamp()});
+                },
+                batchAttendance: async (list) => {
+                    if(isOffline) { const n = [...attendanceRecords]; list.forEach(i=>{ const idx=n.findIndex(r=>`${r.date}_${r.studentId}`===i.id); if(idx>-1)n[idx]={...i.data,id:i.id}; else n.push({...i.data,id:i.id}); }); setAttendanceRecords(n); localStorage.setItem('attendance',JSON.stringify(n)); return; }
+                    const {db,doc,writeBatch,serverTimestamp} = window.AppFirebase;
+                    const batch = writeBatch(db);
+                    list.forEach(i => batch.set(doc(db,'artifacts',appId,'public','data','attendance',i.id), {...i.data, updatedAt: serverTimestamp()}));
+                    await batch.commit();
+                },
+                toggleExcellence: async (did, d, exists) => {
+                    if(isOffline){ let n; if(exists) n=excellenceRecords.filter(r=>`${r.date}_${r.subject}_${r.studentId}`!==did); else n=[...excellenceRecords,{...d,id:did}]; setExcellenceRecords(n); localStorage.setItem('excellence',JSON.stringify(n)); return; }
+                    const {db,doc,setDoc,deleteDoc,serverTimestamp} = window.AppFirebase; const ref = doc(db,'artifacts',appId,'public','data','excellence',did); if(exists) await deleteDoc(ref); else await setDoc(ref, {...d, createdAt: serverTimestamp()});
+                },
+                updateNews: async (t) => {
+                    if(isOffline){ setNewsText(t); localStorage.setItem('newsText',t); return; }
+                    const {db,doc,setDoc} = window.AppFirebase; await setDoc(doc(db,'artifacts',appId,'public','data','settings','config'), {newsText:t}, {merge:true});
+                }
+            };
+
+            if (!firebaseReady || (user && loading)) return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500 gap-3"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div><span>جاري التحميل...</span></div>;
+
+            if (!userRole) return <>{authError && <div className="bg-amber-100 p-2 text-center text-xs font-bold">{authError}</div>}<LoginScreen onLogin={handleLogin} newsText={newsText} Icon={Icon}/></>;
+
+            return (
+                <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans print:block print:h-auto" dir="rtl">
+                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole} onLogout={handleLogout} Icon={Icon} />
+                    <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen print:h-auto print:p-0 relative flex flex-col">
+                        {authError && <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-sm font-bold print-hidden">{authError}</div>}
+                        <NewsTicker text={newsText} Icon={Icon} />
+                        <div className="max-w-6xl mx-auto flex-1 w-full">
+                            {activeTab === 'dashboard' && userRole === 'admin' && <DashboardView students={students} attendanceRecords={attendanceRecords} newsText={newsText} Icon={Icon} actions={actions} />}
+                            {activeTab === 'students' && userRole === 'admin' && <StudentsView students={students} Icon={Icon} actions={actions} setStudents={setStudents} />} 
+                            {activeTab === 'attendance' && <AttendanceView students={students} attendanceRecords={attendanceRecords} userRole={userRole} teacherState={teacherState} setTeacherState={setTeacherState} Icon={Icon} actions={actions} />}
+                            {activeTab === 'excellence' && <ExcellenceView students={students} userRole={userRole} teacherState={teacherState} setTeacherState={setTeacherState} excellenceRecords={excellenceRecords} Icon={Icon} actions={actions} />}
+                            {activeTab === 'reports' && userRole === 'admin' && <ReportsView students={students} attendanceRecords={attendanceRecords} excellenceRecords={excellenceRecords} Icon={Icon} />}
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SchoolAttendanceApp />);
+    </script>
+</body>
+</html>
