@@ -33,29 +33,41 @@
 <body>
     <div id="root"></div>
 
-    <!-- Firebase -->
+    <!-- Firebase SDKs & Initialization -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
         const firebaseConfig = {
-            apiKey: "AIzaSyBrGh7JEvI9AYrQMAwd6M1gfvh-ApGJYW8",
-            authDomain: "bilal-c3b7b.firebaseapp.com",
-            projectId: "bilal-c3b7b",
-            storageBucket: "bilal-c3b7b.firebasestorage.app",
-            messagingSenderId: "326463265436",
-            appId: "1:326463265436:web:215067fafb257ae82feb59",
-            measurementId: "G-PQWZW291ZQ"
+            apiKey: "AIzaSyBL0Avelv5T9pzolNi_Nl3K3KfgV6D3bY0",
+            authDomain: "bilal2-fd3e5.firebaseapp.com",
+            projectId: "bilal2-fd3e5",
+            storageBucket: "bilal2-fd3e5.firebasestorage.app",
+            messagingSenderId: "453026971566",
+            appId: "1:453026971566:web:b4b9145b5ecb30b446d23f",
+            measurementId: "G-HQ8QTKMHMY"
         };
 
-        let app, auth, db;
+        let app, auth, db, analytics;
         let initError = null;
 
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
+            analytics = getAnalytics(app);
+            
+            // محاولة تفعيل الكاش (Persistence)
+            enableIndexedDbPersistence(db).catch((err) => {
+                if (err.code == 'failed-precondition') {
+                    console.log('Persistence failed: Multiple tabs open');
+                } else if (err.code == 'unimplemented') {
+                    console.log('Persistence not supported');
+                }
+            });
+
             console.log("Firebase Initialized");
         } catch (e) {
             console.error("Firebase Init Error:", e);
@@ -66,51 +78,60 @@
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
-    <!-- App -->
+    <!-- Application Code -->
     <script type="text/babel">
         const { useState, useEffect, useMemo, memo, useRef } = React;
-        const appId = 'bilal-school-app-v1';
+        const appId = 'bilal2-fd3e5';
 
+        // --- Icons ---
         const Icon = memo(({ name, size = 24, className, ...props }) => {
             const icons = {
-                School: <><path d="M14 22v-4a2 2 0 1 0-4 0v4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M18 5v17"/><path d="m4 6 8-4 8 4"/><path d="M6 5v17"/><circle cx="12" cy="9" r="2"/></>,
-                Users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
-                Calendar: <><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></>,
-                ClipboardList: <><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></>,
-                BarChart3: <><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></>,
-                Plus: <><path d="M5 12h14"/><path d="M12 5v14"/></>,
-                Trash2: <><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></>,
-                Save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>,
-                CheckCircle: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
-                XCircle: <><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></>,
-                Clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
-                Search: <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>,
-                Lock: <><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
-                UserCheck: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></>,
-                LogOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></>,
-                Copy: <><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></>,
-                Printer: <><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></>,
-                FileSpreadsheet: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></>,
-                Share2: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></>,
-                UploadCloud: <><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></>,
-                FileText: <><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></>,
-                X: <><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>,
-                Filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>,
-                AlertTriangle: <><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
-                ChevronDown: <><path d="m6 9 6 6 6-6"/></>,
-                Eraser: <><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></>,
-                Megaphone: <><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></>,
-                Edit3: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></>,
-                AlertCircle: <><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></>,
-                Award: <><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></>,
-                Star: <><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></>,
-                BookOpen: <><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>,
-                Trophy: <><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></>,
-                UserMinus: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/></>
+                School: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M14 22v-4a2 2 0 1 0-4 0v4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M18 5v17"/><path d="m4 6 8-4 8 4"/><path d="M6 5v17"/><circle cx="12" cy="9" r="2"/></svg>,
+                Users: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+                Calendar: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>,
+                ClipboardList: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>,
+                BarChart3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>,
+                Plus: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+                Trash2: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
+                Save: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+                CheckCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+                XCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>,
+                Clock: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+                Search: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+                Lock: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+                UserCheck: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>,
+                LogOut: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>,
+                Copy: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>,
+                Printer: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>,
+                FileSpreadsheet: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>,
+                Share2: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>,
+                UploadCloud: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>,
+                FileText: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>,
+                X: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+                Filter: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
+                AlertTriangle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>,
+                ChevronDown: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m6 9 6 6 6-6"/></svg>,
+                Eraser: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>,
+                Megaphone: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>,
+                Edit3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>,
+                AlertCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>,
+                Award: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>,
+                Star: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+                BookOpen: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
+                Trophy: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>,
+                UserMinus: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/></svg>,
+                WifiOff: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><line x1="1" x2="23" y1="1" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" x2="12.01" y1="20" y2="20"/></svg>,
+                Wifi: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" x2="12.01" y1="20" y2="20"/></svg>,
+                CloudOff: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M22.61 16.95A5 5 0 0 0 18 10h-1.26a8 8 0 0 0-7.05-6M5 5a8 8 0 0 0 4 7h1.8a5 5 0 0 0 1.8 4"/><line x1="1" x2="23" y1="1" y2="23"/></svg>,
+                CloudCheck: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M12 22h6a5 5 0 0 0 5-5c0-2.18-1.1-4.1-2.72-4.73C20.9 7.84 17.5 5 13 5c-4.1 0-7.5 2.6-8.3 6.27A5 5 0 0 0 5 17c1.7 0 3.24-.8 4.1-2"/><path d="m9 12 2 2 4-4"/></svg>,
+                Activity: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
+                Key: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m21 2-2 2m-7.6 7.6a6 6 0 1 1 2.4-8 6 6 0 0 1-2.4 8Zm-.8 2.4L5 21l-3-3 3-3h3l3 3"/></svg>,
+                Sparkles: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z"/><path d="M5 3v4"/><path d="M9 5H1"/><path d="M19 21v-4"/><path d="M15 19h8"/></svg>
             };
-            return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{icons[name] || <circle cx="12" cy="12" r="10"/>}</svg>;
+            return icons[name] || <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/></svg>;
         });
 
+        // --- Sub-Components ---
         const NewsTicker = memo(({ text }) => (
             <div className="bg-emerald-800 text-white overflow-hidden relative shadow-md print-hidden h-12 flex-shrink-0 w-full border-b border-emerald-700">
                 <div className="flex items-center h-full w-full">
@@ -127,9 +148,20 @@
             </div>
         ));
 
-        const LoginScreen = memo(({ onLogin, newsText }) => {
+        const LoginScreen = memo(({ onLogin, onTeacherLogin, newsText }) => {
             const [password, setPassword] = useState('');
             const [showAdminInput, setShowAdminInput] = useState(false);
+            const [showTeacherInput, setShowTeacherInput] = useState(false);
+            const [fileNumber, setFileNumber] = useState('');
+
+            const handleTeacherSubmit = () => {
+                if (!fileNumber.trim()) {
+                    alert("الرجاء إدخال رقم الملف");
+                    return;
+                }
+                onTeacherLogin(fileNumber.trim());
+            };
+
             return (
                 <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
                     <NewsTicker text={newsText} />
@@ -138,9 +170,10 @@
                             <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600"><Icon name="School" size={40} /></div>
                             <h1 className="text-2xl font-bold text-slate-800 mb-2">مدرسة بلال بن رباح</h1>
                             <p className="text-slate-500 mb-8">نظام رصد الحضور والغياب</p>
-                            {!showAdminInput ? (
+                            
+                            {!showAdminInput && !showTeacherInput ? (
                                 <div className="space-y-4">
-                                    <button onClick={() => onLogin('teacher')} className="w-full py-4 px-6 bg-white border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 rounded-xl flex items-center gap-4 transition-all group">
+                                    <button onClick={() => setShowTeacherInput(true)} className="w-full py-4 px-6 bg-white border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 rounded-xl flex items-center gap-4 transition-all group">
                                         <div className="bg-emerald-100 p-3 rounded-full text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors"><Icon name="UserCheck" size={24} /></div>
                                         <div className="text-right"><div className="font-bold text-slate-800">دخول المعلمين</div><div className="text-xs text-slate-500">رصد الغياب / المجيدين</div></div>
                                     </button>
@@ -149,6 +182,15 @@
                                         <div className="text-right"><div className="font-bold text-slate-800">دخول الإدارة</div><div className="text-xs text-slate-500">التقارير وإدارة الطلاب</div></div>
                                     </button>
                                     <p className="text-emerald-600 font-bold mt-4 text-sm">تصميم: أ.عبدالله بن خلف الرواحي</p>
+                                </div>
+                            ) : showTeacherInput ? (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <h3 className="font-bold text-slate-700 mb-4">تسجيل دخول المعلم</h3>
+                                    <input type="text" value={fileNumber} onChange={(e) => setFileNumber(e.target.value)} placeholder="أدخل رقم الملف" className="w-full p-3 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg" autoFocus />
+                                    <div className="flex gap-2">
+                                        <button onClick={handleTeacherSubmit} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition-colors">دخول</button>
+                                        <button onClick={() => { setShowTeacherInput(false); setFileNumber(''); }} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">إلغاء</button>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="animate-in fade-in slide-in-from-bottom-4">
@@ -166,53 +208,174 @@
             );
         });
 
-        const Sidebar = memo(({ activeTab, setActiveTab, userRole, onLogout }) => (
+        const Sidebar = memo(({ activeTab, setActiveTab, userRole, onLogout, dbError, studentsCount }) => (
             <div className="w-full md:w-64 bg-slate-800 text-white flex-shrink-0 md:min-h-screen flex flex-col print-hidden">
-                <div className="p-6 border-b border-slate-700 flex items-center gap-3"><Icon name="School" size={32} className="text-emerald-400" /><div><h1 className="font-bold text-lg leading-tight">بلال بن رباح</h1><p className="text-xs text-slate-400">{userRole === 'admin' ? 'لوحة الإدارة' : 'لوحة المعلم'}</p><div className="text-[10px] text-emerald-200 mt-1 font-medium">تصميم: أ.عبدالله بن خلف الرواحي</div></div></div>
+                <div className="p-6 border-b border-slate-700 flex items-center gap-3">
+                    <Icon name="School" size={32} className="text-emerald-400" />
+                    <div>
+                        <h1 className="font-bold text-lg leading-tight">بلال بن رباح</h1>
+                        <p className="text-xs text-slate-400">{userRole === 'admin' ? 'لوحة الإدارة' : 'لوحة المعلم'}</p>
+                        <div className="text-[10px] text-emerald-200 mt-1 font-medium">تصميم: أ.عبدالله بن خلف الرواحي</div>
+                    </div>
+                </div>
+                <div className="px-6 py-2 flex flex-col gap-1 text-xs border-b border-slate-700">
+                    <div className="flex items-center gap-2">
+                        {dbError ? <><Icon name="WifiOff" size={14} className="text-red-500" /><span className="text-red-400">غير متصل</span></> : <><Icon name="Wifi" size={14} className="text-green-400" /><span className="text-green-400">متصل (Firebase)</span></>}
+                    </div>
+                    {studentsCount !== undefined && <div className="text-slate-400">الطلاب: {studentsCount}</div>}
+                </div>
                 <nav className="flex-1 p-4 space-y-2">
                     {userRole === 'admin' && <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="BarChart3" size={18} /> <span className="font-medium">لوحة المعلومات</span></button>}
                     <button onClick={() => setActiveTab('attendance')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'attendance' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="ClipboardList" size={18} /> <span className="font-medium">رصد الغياب</span></button>
                     <button onClick={() => setActiveTab('excellence')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'excellence' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Star" size={18} /> <span className="font-medium">رصد المجيدين</span></button>
-                    {userRole === 'admin' && <><button onClick={() => setActiveTab('students')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'students' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Users" size={18} /> <span className="font-medium">الطلاب</span></button><button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Calendar" size={18} /> <span className="font-medium">التقارير</span></button></>}
+                    {userRole === 'admin' && <>
+                        <button onClick={() => setActiveTab('students')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'students' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Users" size={18} /> <span className="font-medium">الطلاب</span></button>
+                        <button onClick={() => setActiveTab('teachers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'teachers' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Key" size={18} /> <span className="font-medium">إدارة المعلمين</span></button>
+                        <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Calendar" size={18} /> <span className="font-medium">التقارير</span></button>
+                    </>}
                 </nav>
                 <div className="p-4 border-t border-slate-700"><button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 text-red-300 hover:bg-slate-700 hover:text-red-200 rounded-lg transition-colors text-sm"><Icon name="LogOut" size={16} /> تسجيل خروج</button></div>
             </div>
         ));
 
+        const TeachersManagerView = memo(({ teachers, Icon, actions }) => {
+            const [fileNumber, setFileNumber] = useState('');
+            const [name, setName] = useState('');
+            
+            const add = async (e) => {
+                e.preventDefault();
+                if(!fileNumber.trim()) return alert("الرجاء إدخال رقم الملف");
+                try {
+                    await actions.addTeacher({ id: fileNumber.trim(), name: name.trim() || 'معلم' });
+                    setFileNumber(''); setName('');
+                    alert("تمت الإضافة بنجاح");
+                } catch(e) { alert("خطأ في الإضافة"); }
+            };
+
+            const del = async (id) => {
+                if(confirm('هل أنت متأكد من حذف هذا المعلم؟')) {
+                    await actions.deleteTeacher(id);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-2xl font-bold text-slate-800">إدارة دخول المعلمين</h2>
+                    <div className="bg-white p-6 rounded-xl shadow-sm border">
+                        <div className="flex gap-4 items-end mb-4">
+                            <div className="flex-1">
+                                <label className="text-xs font-bold mb-1 block">رقم الملف (كلمة المرور)</label>
+                                <input value={fileNumber} onChange={(e)=>setFileNumber(e.target.value)} className="w-full p-2 border rounded" placeholder="مثال: 1234"/>
+                            </div>
+                            <div className="flex-1">
+                                <label className="text-xs font-bold mb-1 block">اسم المعلم (اختياري)</label>
+                                <input value={name} onChange={(e)=>setName(e.target.value)} className="w-full p-2 border rounded" placeholder="الاسم"/>
+                            </div>
+                            <button onClick={add} className="bg-emerald-600 text-white px-6 py-2 rounded font-bold h-10">إضافة صلاحية</button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <div className="p-4 border-b bg-slate-50 font-bold">المعلمين المصرح لهم ({teachers.length})</div>
+                        <div className="divide-y">
+                            {teachers.length === 0 ? <div className="p-8 text-center text-slate-400">لا يوجد معلمين مسجلين</div> : 
+                            teachers.map(t => (
+                                <div key={t.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
+                                    <div>
+                                        <div className="font-bold flex items-center gap-2"><Icon name="Key" size={16} className="text-emerald-500"/> {t.id}</div>
+                                        <div className="text-xs text-slate-500">{t.name}</div>
+                                    </div>
+                                    <button onClick={()=>del(t.id)} className="text-red-400 hover:bg-red-50 p-2 rounded"><Icon name="Trash2" size={18}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
         const DashboardView = memo(({ students, attendanceRecords, newsText, actions }) => {
             const today = new Date().toISOString().split('T')[0];
             const [isEditingNews, setIsEditingNews] = useState(false);
             const [tempNews, setTempNews] = useState(newsText || "");
+            const [aiLoading, setAiLoading] = useState(false);
+            const [aiAnalysis, setAiAnalysis] = useState(null);
+
             useEffect(() => setTempNews(newsText || ""), [newsText]);
-            
+
             const stats = useMemo(() => {
                 const recs = attendanceRecords.filter(r => r.date === today);
-                return { total: students.length, present: recs.filter(r=>r.status==='present').length, absent: recs.filter(r=>r.status==='absent').length, late: recs.filter(r=>r.status==='late').length };
+                const total = students.length;
+                const present = recs.filter(r => r.status === 'present').length;
+                const absent = recs.filter(r => r.status === 'absent').length;
+                const late = recs.filter(r => r.status === 'late').length;
+                const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+                return { total, present, absent, late, rate };
             }, [students, attendanceRecords]);
 
+            const handleSaveNews = async () => {
+                try { await actions.updateNews(tempNews); setIsEditingNews(false); alert('تم التحديث'); } catch (e) { alert('خطأ'); }
+            };
             const topTeachers = useMemo(() => {
-                const s = {}; attendanceRecords.forEach(r => { if(r.teacherName?.trim()) s[r.teacherName.trim()] = (s[r.teacherName.trim()] || 0) + 1; });
-                return Object.entries(s).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                const stats = {}; attendanceRecords.forEach(r => { if (r.teacherName && typeof r.teacherName === 'string' && r.teacherName.trim()) { const n = r.teacherName.trim(); stats[n] = (stats[n] || 0) + 1; } });
+                return Object.entries(stats).sort(([, a], [, b]) => b - a).slice(0, 5);
             }, [attendanceRecords]);
-            
-            // Fixed: renamed variable to match usage
             const mostAbsentStudents = useMemo(() => {
-                const s = {}; attendanceRecords.forEach(r => { if(r.status==='absent') s[r.studentId] = (s[r.studentId] || 0) + 1; });
-                return Object.entries(s).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, c]) => { const st = students.find(x=>x.id===id); return st ? {...st, count: c} : null; }).filter(Boolean);
+                const stats = {}; attendanceRecords.forEach(r => { if (r.status === 'absent') stats[r.studentId] = (stats[r.studentId] || 0) + 1; });
+                return Object.entries(stats).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id, c]) => { const s = students.find(s => s.id === id); return s ? { ...s, count: c } : null; }).filter(Boolean);
             }, [attendanceRecords, students]);
+
+            const handleAiAnalysis = async () => {
+                setAiLoading(true);
+                setAiAnalysis(null);
+                const prompt = `
+                    بصفتك مساعداً ذكياً لمدير مدرسة، قم بتحليل بيانات اليوم التالية:
+                    - التاريخ: ${today}
+                    - إجمالي الطلاب: ${stats.total}
+                    - نسبة الحضور: ${stats.rate}%
+                    - عدد الغياب: ${stats.absent}
+                    - عدد التأخير: ${stats.late}
+                    - الطلاب الأكثر تغيباً: ${mostAbsentStudents.map(s => s.name).join(', ')}
+                    - المعلمين الأكثر نشاطاً: ${topTeachers.map(t => t[0]).join(', ')}
+
+                    المطلوب:
+                    1. كتابة ملخص تنفيذي سريع لحالة المدرسة اليوم.
+                    2. اقتراح إجراءين لتحسين الحضور بناءً على هذه الأرقام.
+                    3. صياغة رسالة قصيرة لشكر المعلمين الأكثر نشاطاً.
+                `;
+                const result = await callGemini(prompt);
+                setAiAnalysis(result);
+                setAiLoading(false);
+            };
+
+            const Stat = ({ title, value, color, iconName }) => (<div className={`${color} text-white p-6 rounded-xl shadow-md flex justify-between items-center`}><div><p className="text-sm opacity-90 mb-1">{title}</p><p className="text-3xl font-bold">{value}</p></div><div className="opacity-20 transform scale-150"><Icon name={iconName} size={24} /></div></div>);
 
             return (
                 <div className="space-y-6 animate-in fade-in duration-500">
-                    <h2 className="text-2xl font-bold text-slate-800 mb-6">لوحة المعلومات</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                        <div className="bg-blue-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">إجمالي الطلاب</p><p className="text-3xl font-bold">{stats.total}</p></div><div className="opacity-20 transform scale-150"><Icon name="Users" /></div></div>
-                        <div className="bg-emerald-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">حضور اليوم</p><p className="text-3xl font-bold">{stats.present}</p></div><div className="opacity-20 transform scale-150"><Icon name="CheckCircle" /></div></div>
-                        <div className="bg-red-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">غياب اليوم</p><p className="text-3xl font-bold">{stats.absent}</p></div><div className="opacity-20 transform scale-150"><Icon name="XCircle" /></div></div>
-                        <div className="bg-amber-500 text-white p-6 rounded-xl shadow-md flex justify-between items-center"><div><p className="text-sm opacity-90 mb-1">تأخير اليوم</p><p className="text-3xl font-bold">{stats.late}</p></div><div className="opacity-20 transform scale-150"><Icon name="Clock" /></div></div>
+                    <div className="flex justify-between items-center flex-wrap gap-4">
+                        <h2 className="text-2xl font-bold text-slate-800">لوحة المعلومات</h2>
+                        <div className="flex gap-2">
+                            <button onClick={actions.deleteAllAttendance} className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-red-200 transition-colors"><Icon name="Trash2" size={20} /> تصفير السجلات</button>
+                            <button onClick={handleAiAnalysis} disabled={aiLoading} className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-md hover:shadow-lg transition-all disabled:opacity-50">
+                                {aiLoading ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : <Icon name="Sparkles" size={20} />} 
+                                {aiLoading ? 'جاري التحليل...' : 'تحليل ذكي'}
+                            </button>
+                        </div>
                     </div>
+
+                    {aiAnalysis && (
+                        <div className="bg-white p-6 rounded-xl shadow-lg border border-purple-100 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1"><Icon name="Sparkles" size={12}/> تقرير الذكاء الاصطناعي</div>
+                            <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: marked.parse(aiAnalysis) }}></div>
+                            <button onClick={() => setAiAnalysis(null)} className="mt-4 text-sm text-slate-400 hover:text-red-500 underline">إغلاق التقرير</button>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"><Stat title="إجمالي الطلاب" value={stats.total} color="bg-blue-500" iconName="Users" /><Stat title="نسبة الحضور" value={`${stats.rate}%`} color="bg-emerald-500" iconName="CheckCircle" /><Stat title="الغياب اليوم" value={stats.absent} color="bg-red-500" iconName="XCircle" /><Stat title="التأخير اليوم" value={stats.late} color="bg-amber-500" iconName="Clock" /></div>
+                    
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 mb-6">
                         <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Megaphone" className="text-emerald-600" size={20} /> الإعلانات</h3>{!isEditingNews && <button onClick={() => setIsEditingNews(true)} className="text-sm text-emerald-600 flex items-center gap-1"><Icon name="Edit3" size={16} /> تعديل</button>}</div>
-                        {isEditingNews ? (<div className="flex flex-col gap-2"><textarea value={tempNews} onChange={(e) => setTempNews(e.target.value)} className="w-full p-2 border rounded" /><div className="flex gap-2 justify-end"><button onClick={() => setIsEditingNews(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={() => {actions.updateNews(tempNews); setIsEditingNews(false);}} className="bg-emerald-600 text-white px-4 py-2 rounded">حفظ</button></div></div>) : (<div className="bg-slate-50 p-4 rounded-lg text-center">{newsText || "لا يوجد إعلان."}</div>)}
+                        {isEditingNews ? (<div className="flex flex-col gap-2"><textarea value={tempNews} onChange={(e) => setTempNews(e.target.value)} className="w-full p-2 border rounded" /><div className="flex gap-2 justify-end"><button onClick={() => setIsEditingNews(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={handleSaveNews} className="bg-emerald-600 text-white px-4 py-2 rounded">حفظ</button></div></div>) : (<div className="bg-slate-50 p-4 rounded-lg text-center">{newsText || "لا يوجد إعلان."}</div>)}
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="bg-white p-6 rounded-xl shadow-sm border h-full"><h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><Icon name="Award" className="text-yellow-500" size={24} /> المعلمين الأكثر نشاطاً</h3><div className="space-y-3">{topTeachers.map(([n, c], i) => (<div key={n} className="flex justify-between p-3 bg-slate-50 rounded border hover:bg-blue-50"><span className="font-bold">{i+1}. {n}</span><span className="text-xs bg-white px-2 py-1 rounded border">{c} عملية</span></div>))}</div></div>
@@ -236,62 +399,45 @@
             const nameInputRef = useRef(null);
 
             const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(), [students]);
-            const displayedStudents = useMemo(() => filterGrade ? students.filter(s => s.grade === filterGrade) : students, [students, filterGrade]);
+            
+            // FIXED: Define displayedStudents properly
+            const displayedStudents = useMemo(() => {
+                if (!filterGrade) return students;
+                return students.filter(s => s.grade === filterGrade);
+            }, [students, filterGrade]);
 
-            const add = (e) => { 
-                e.preventDefault(); 
-                if(!newName.trim()) return; 
-                const studentData = { name: newName, grade: newGrade || 'غير محدد' };
-                setNewName(''); 
-                nameInputRef.current?.focus(); 
-                try { 
-                    actions.addStudent(studentData); 
-                } catch (err) { alert("خطأ في الإضافة"); } 
-            };
-
-            const del = (id) => { if(confirm('حذف؟')) actions.deleteStudent(id); };
+            const add = async (e) => { e.preventDefault(); if(!newName.trim()) return; await actions.addStudent({ name: newName, grade: newGrade || 'غير محدد' }); setNewName(''); setNewGrade(''); };
+            const del = async (id) => { if(confirm('حذف؟')) await actions.deleteStudent(id); };
             
             const delAll = async () => { setProcessing(true); try { await actions.batchDelete(students); setShowDelAll(false); } catch(e) { console.error(e); } setProcessing(false); };
             const delGrade = async () => { if(!gradeToDelete) return; setProcessing(true); try { await actions.batchDelete(students.filter(s => s.grade === gradeToDelete)); setShowDelGrade(false); setGradeToDelete(''); } catch(e) { console.error(e); } setProcessing(false); };
             
             const bulkImport = async () => {
                 if(!importText.trim()) return;
-                const lines = importText.split('\n').filter(l => l.trim());
-                const toAdd = lines.map(l => {
-                    const p = l.includes(',') ? l.split(',') : l.includes('\t') ? l.split('\t') : [l];
-                    return { name: p[0].trim(), grade: p[1]?.trim() || bulkGrade || 'غير محدد' };
-                }).filter(s => s.name);
-                
-                setShowImport(false); setImportText(''); setBulkGrade('');
-                
-                const batchSize = 400;
-                for (let i = 0; i < toAdd.length; i += batchSize) {
-                    await actions.batchAdd(toAdd.slice(i, i + batchSize));
-                }
+                setProcessing(true);
+                try {
+                    const lines = importText.split('\n').filter(l => l.trim());
+                    const toAdd = lines.map(l => {
+                        const p = l.includes(',') ? l.split(',') : l.includes('\t') ? l.split('\t') : [l];
+                        return { name: p[0].trim(), grade: p[1]?.trim() || bulkGrade || 'غير محدد' };
+                    }).filter(s => s.name);
+                    await actions.batchAdd(toAdd);
+                    setImportText(''); setBulkGrade(''); setShowImport(false); alert(`تم إضافة ${toAdd.length} طالب`);
+                } catch(e) { console.error(e); alert('خطأ'); }
+                setProcessing(false);
             };
 
             return (
                 <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-slate-800">إدارة الطلاب</h2>
-                    </div>
-
+                    <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">إدارة الطلاب</h2></div>
                     {showImport && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-2xl p-6 flex flex-col gap-4 h-[80vh]"><h3 className="font-bold">استيراد</h3><input placeholder="صف موحد (اختياري)" onChange={(e)=>setBulkGrade(e.target.value)} className="p-2 border rounded"/><textarea placeholder="الأسماء..." value={importText} onChange={(e)=>setImportText(e.target.value)} className="flex-1 p-2 border rounded"/><div className="flex justify-end gap-2"><button onClick={()=>setShowImport(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={bulkImport} className="bg-emerald-600 text-white px-4 py-2 rounded">بدء الحفظ</button></div></div></div>}
                     {showDelAll && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><div className="text-red-600 font-bold mb-4">حذف الكل؟</div><button onClick={delAll} disabled={processing} className="bg-red-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'تأكيد'}</button><button onClick={()=>setShowDelAll(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
                     {showDelGrade && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><h3 className="font-bold mb-4">حذف صف</h3><select onChange={(e)=>setGradeToDelete(e.target.value)} className="w-full p-2 border mb-4"><option value="">اختر</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><button onClick={delGrade} disabled={processing} className="bg-amber-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'حذف'}</button><button onClick={()=>setShowDelGrade(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
 
                     <div className="grid lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border flex gap-4 items-end">
-                            <div className="flex-1">
-                                <label className="text-xs font-bold">الاسم</label>
-                                <input ref={nameInputRef} value={newName} onChange={(e)=>setNewName(e.target.value)} className="w-full p-2 border rounded" placeholder="اسم الطالب"/>
-                            </div>
-                            <div className="w-40 relative">
-                                <label className="text-xs font-bold">الصف</label>
-                                <input list="grades" value={newGrade} onChange={(e)=>setNewGrade(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="اختر"/>
-                                <datalist id="grades">{uniqueGrades.map(g=><option key={g} value={g}/>)}</datalist>
-                                {newGrade && <button onClick={()=>setNewGrade('')} className="absolute left-2 top-8 text-slate-400 hover:text-red-500 bg-white rounded-full p-0.5"><Icon name="X" size={14}/></button>}
-                            </div>
+                            <div className="flex-1"><label className="text-xs font-bold">الاسم</label><input ref={nameInputRef} value={newName} onChange={(e)=>setNewName(e.target.value)} className="w-full p-2 border rounded" placeholder="اسم الطالب"/></div>
+                            <div className="w-40 relative"><label className="text-xs font-bold">الصف</label><input list="grades" value={newGrade} onChange={(e)=>setNewGrade(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="اختر"/><datalist id="grades">{uniqueGrades.map(g=><option key={g} value={g}/>)}</datalist>{newGrade && <button onClick={()=>setNewGrade('')} className="absolute left-2 top-8 text-slate-400 hover:text-red-500 bg-white rounded-full p-0.5"><Icon name="X" size={14}/></button>}</div>
                             <button onClick={add} className="bg-emerald-600 text-white px-6 py-2 rounded font-bold">إضافة</button>
                         </div>
                         <div className="bg-emerald-50 p-6 rounded-xl border flex justify-center items-center"><button onClick={()=>setShowImport(true)} className="bg-white text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg font-bold flex items-center gap-2"><Icon name="UploadCloud" size={18}/> استيراد</button></div>
@@ -299,21 +445,10 @@
 
                     <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                         <div className="p-4 border-b bg-slate-50 flex flex-wrap gap-4 justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold">الطلاب ({displayedStudents.length})</span>
-                                <select className="text-sm p-1 border rounded bg-white" value={filterGrade} onChange={e => setFilterGrade(e.target.value)}><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select>
-                            </div>
+                            <div className="flex items-center gap-2"><span className="font-bold">الطلاب ({displayedStudents.length})</span><select className="text-sm p-1 border rounded bg-white" value={filterGrade} onChange={e => setFilterGrade(e.target.value)}><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select></div>
                             <div className="flex gap-2">{students.length>0 && <><button onClick={()=>setShowDelGrade(true)} className="text-xs bg-amber-50 text-amber-700 px-3 py-1 border border-amber-200 rounded">حذف صف</button><button onClick={()=>setShowDelAll(true)} className="text-xs bg-red-50 text-red-700 px-3 py-1 border border-red-200 rounded">حذف الكل</button></>}</div>
                         </div>
-                        <div className="divide-y max-h-[60vh] overflow-y-auto">
-                            {displayedStudents.map(s=>(
-                                <div key={s.id} className="p-4 flex justify-between hover:bg-slate-50">
-                                    <div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">{s.grade}</div></div>
-                                    <button onClick={()=>del(s.id)} className="text-red-400"><Icon name="Trash2" size={18}/></button>
-                                </div>
-                            ))}
-                            {displayedStudents.length === 0 && <div className="p-8 text-center text-slate-400">لا يوجد طلاب للعرض</div>}
-                        </div>
+                        <div className="divide-y max-h-[60vh] overflow-y-auto">{displayedStudents.map(s=>(<div key={s.id} className="p-4 flex justify-between hover:bg-slate-50"><div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">{s.grade}</div></div><button onClick={()=>del(s.id)} className="text-red-400"><Icon name="Trash2" size={18}/></button></div>))}</div>
                     </div>
                 </div>
             );
@@ -329,6 +464,10 @@
             const canMark = userRole === 'admin' || isComplete;
             const filtered = useMemo(() => { if (userRole === 'teacher' && !teacherState.grade) return []; return students.filter(s => s.name.includes(search) && (teacherState.grade ? s.grade === teacherState.grade : true)); }, [students, search, teacherState.grade, userRole]);
             
+            const update = (sid, status) => {
+                if (!canMark) { alert("الرجاء تعبئة اسم المعلم والحصة والصف أولاً لتفعيل الرصد"); return; }
+                actions.updateAttendance(`${date}_${sid}`, { date, studentId: sid, status, teacherName: teacherState.name, grade: teacherState.grade, session: teacherState.session });
+            };
             const batch = (status) => { if (!canMark || !filtered.length) return; const items = filtered.map(s => ({ id: `${date}_${s.id}`, data: { date, studentId: s.id, status, teacherName: teacherState.name, grade: teacherState.grade, session: teacherState.session } })); actions.batchAttendance(items); };
             const copy = () => { if (!isComplete) return alert("أكمل البيانات"); const ids = new Set(filtered.map(s => s.id)); const abs = students.filter(s => ids.has(s.id) && localAttendance[s.id] === 'absent'); const lat = students.filter(s => ids.has(s.id) && localAttendance[s.id] === 'late'); const t = `*مدرسة بلال بن رباح*\nالتاريخ: ${date}\nالمعلم: ${teacherState.name}\nالصف: ${teacherState.grade}\nالحصة: ${teacherState.session}\n\n🛑 *غياب (${abs.length}):*\n${abs.map(s => s.name).join('\n') || 'لا يوجد'}\n\n⚠️ *تأخير (${lat.length}):*\n${lat.map(s => s.name).join('\n') || 'لا يوجد'}`; const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); alert("تم النسخ"); };
 
@@ -336,8 +475,8 @@
                 <div className="space-y-6">
                     {userRole === 'teacher' && <div className="bg-white p-4 rounded shadow border border-emerald-100 grid grid-cols-2 gap-4"><div><label className="text-xs font-bold">المعلم *</label><input value={teacherState.name} onChange={(e)=>setTeacherState(p=>({...p,name:e.target.value}))} className="w-full p-2 border rounded"/></div><div><label className="text-xs font-bold">الحصة *</label><select value={teacherState.session} onChange={(e)=>setTeacherState(p=>({...p,session:e.target.value}))} className="w-full p-2 border rounded"><option value="">اختر</option>{sessions.map(s=><option key={s} value={s}>{s}</option>)}</select></div></div>}
                     <div className="flex justify-between gap-2 items-center"><h2 className="text-xl font-bold">رصد الغياب</h2><div className="flex gap-2"><input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="p-2 border rounded"/>{userRole==='teacher'&&<button onClick={copy} disabled={!isComplete} className={`px-4 py-2 rounded text-white font-bold ${!isComplete?'bg-slate-400':'bg-emerald-600'}`}>نسخ</button>}</div></div>
-                    <div className="bg-white p-4 rounded shadow border flex gap-4 items-center sticky top-0 z-10"><select value={teacherState.grade} onChange={(e)=>setTeacherState(p=>({...p,grade:e.target.value}))} className="p-2 border rounded w-1/4"><option value="">{userRole==='teacher'?'اختر الصف *':'الكل'}</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><input placeholder="بحث..." value={search} onChange={(e)=>setSearch(e.target.value)} className="p-2 border rounded flex-1"/><div className="flex gap-2"><button onClick={()=>batch('present')} disabled={!canMark} className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded">تحضير</button><button onClick={()=>batch('absent')} disabled={!canMark} className="px-3 py-1 bg-red-100 text-red-700 rounded">تغييب</button></div></div>
-                    <div className="bg-white rounded shadow border overflow-hidden"><div className="divide-y">{filtered.length===0?<div className="p-8 text-center text-slate-400">لا يوجد طلاب</div>:filtered.map(s=>(<div key={s.id} className={`p-4 flex justify-between items-center ${localAttendance[s.id]==='absent'?'bg-red-50':''}`}><div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">{s.grade}</div></div><div className="flex gap-1">{['present','late','absent'].map(st=>(<button key={st} onClick={()=>actions.updateAttendance(`${date}_${s.id}`, { date, studentId: s.id, status: st, teacherName: teacherState.name, grade: teacherState.grade, session: teacherState.session })} disabled={!canMark} className={`p-2 rounded border ${localAttendance[s.id]===st?(st==='present'?'bg-emerald-600 text-white':st==='late'?'bg-amber-500 text-white':'bg-red-500 text-white'):'bg-white text-slate-500'} disabled:opacity-50`}><Icon name={st==='present'?'CheckCircle':st==='late'?'Clock':'XCircle'} size={18}/></button>))}</div></div>))}</div></div>
+                    <div className="bg-white p-4 rounded shadow border flex gap-4 items-center sticky top-0 z-10"><select value={teacherState.grade} onChange={(e)=>setTeacherState(p=>({...p,grade:e.target.value}))} className="p-2 border rounded w-1/4"><option value="">{userRole==='teacher'?'اختر الصف *':'الكل'}</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><input placeholder="بحث..." value={search} onChange={(e)=>setSearch(e.target.value)} className="p-2 border rounded flex-1"/><div className="flex gap-2"><button onClick={()=>batch('present')} className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded cursor-pointer hover:bg-emerald-200">تحضير</button><button onClick={()=>batch('absent')} className="px-3 py-1 bg-red-100 text-red-700 rounded cursor-pointer hover:bg-red-200">تغييب</button></div></div>
+                    <div className="bg-white rounded shadow border overflow-hidden"><div className="divide-y">{filtered.length===0?<div className="p-8 text-center text-slate-400">لا يوجد طلاب</div>:filtered.map(s=>(<div key={s.id} className={`p-4 flex justify-between items-center ${localAttendance[s.id]==='absent'?'bg-red-50':''}`}><div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">{s.grade}</div></div><div className="flex gap-1">{['present','late','absent'].map(st=>(<button key={st} onClick={()=>update(s.id,st)} className={`p-2 rounded border cursor-pointer transition-colors ${localAttendance[s.id]===st?(st==='present'?'bg-emerald-600 text-white':st==='late'?'bg-amber-500 text-white':'bg-red-500 text-white'):'bg-white text-slate-500 hover:bg-slate-100'}`}><Icon name={st==='present'?'CheckCircle':st==='late'?'Clock':'XCircle'} size={18}/></button>))}</div></div>))}</div></div>
                 </div>
             );
         });
@@ -360,29 +499,70 @@
             );
         };
 
-        const ReportsView = memo(({ students, attendanceRecords, excellenceRecords }) => {
+        const ReportsView = memo(({ students, attendanceRecords, excellenceRecords, Icon }) => {
             const [type, setType] = useState('attendance');
-            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+            const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
             const [grade, setGrade] = useState('');
             const [subject, setSubject] = useState('');
-            const [minSub, setMinSub] = useState(4);
+            const [minSub, setMinSub] = useState(2);
             const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(), [students]);
             const subjects = ["التربية الإسلامية", "اللغة العربية", "الرياضيات", "العلوم", "اللغة الإنجليزية", "الدراسات الاجتماعية", "تقنية المعلومات", "الرياضة المدرسية", "الفنون التشكيلية", "الموسيقى", "المهارات الحياتية", "التاريخ", "الجغرافيا", "الفيزياء", "الكيمياء", "الأحياء"];
 
-            const attRecs = attendanceRecords.filter(r => r.date === date);
-            const abs = attRecs.filter(r => r.status === 'absent').map(r => students.find(s => s.id === r.studentId)).filter(Boolean).filter(s => grade ? s.grade === grade : true);
-            const lat = attRecs.filter(r => r.status === 'late').map(r => students.find(s => s.id === r.studentId)).filter(Boolean).filter(s => grade ? s.grade === grade : true);
-            const excRecs = excellenceRecords.filter(r => r.date === date).filter(r => grade ? r.grade === grade : true).filter(r => subject ? r.subject === subject : true);
+            const dateFilter = (r) => r.date >= startDate && r.date <= endDate;
+            
+            const attRecs = useMemo(() => attendanceRecords.filter(dateFilter), [attendanceRecords, startDate, endDate]);
+            
+            const abs = useMemo(() => attRecs.filter(r => r.status === 'absent').map(r => {
+                const s = students.find(st => st.id === r.studentId);
+                return s ? { ...s, date: r.date, recId: r.id } : null;
+            }).filter(Boolean).filter(s => grade ? s.grade === grade : true), [attRecs, students, grade]);
+
+            const lat = useMemo(() => attRecs.filter(r => r.status === 'late').map(r => {
+                const s = students.find(st => st.id === r.studentId);
+                return s ? { ...s, date: r.date, recId: r.id } : null;
+            }).filter(Boolean).filter(s => grade ? s.grade === grade : true), [attRecs, students, grade]);
+            
+            const excRecs = useMemo(() => excellenceRecords.filter(dateFilter).filter(r => grade ? r.grade === grade : true).filter(r => subject ? r.subject === subject : true), [excellenceRecords, startDate, endDate, grade, subject]);
+            
             const multiExc = useMemo(() => {
-                const counts = {}; excellenceRecords.forEach(r => { if (!counts[r.studentId]) counts[r.studentId] = new Set(); counts[r.studentId].add(r.subject); });
-                return Object.keys(counts).map(id => { const s = students.find(st => st.id === id); return s && counts[id].size >= minSub ? { ...s, count: counts[id].size, subs: Array.from(counts[id]).join(', ') } : null; }).filter(Boolean).filter(s => grade ? s.grade === grade : true).sort((a,b) => b.count - a.count);
-            }, [excellenceRecords, students, minSub, grade]);
+                const counts = {}; 
+                excellenceRecords.filter(dateFilter).forEach(r => { 
+                    if (!counts[r.studentId]) counts[r.studentId] = new Set(); 
+                    counts[r.studentId].add(r.subject); 
+                });
+                return Object.keys(counts).map(id => { 
+                    const s = students.find(st => st.id === id); 
+                    return s && counts[id].size >= minSub ? { ...s, count: counts[id].size, subs: Array.from(counts[id]).join(', ') } : null; 
+                }).filter(Boolean).filter(s => grade ? s.grade === grade : true).sort((a,b) => b.count - a.count);
+            }, [excellenceRecords, students, minSub, grade, startDate, endDate]);
+
+            const teacherActivity = useMemo(() => {
+                const counts = {};
+                const process = (list) => list.filter(dateFilter).forEach(r => {
+                    if(r.teacherName) counts[r.teacherName] = (counts[r.teacherName] || 0) + 1;
+                });
+                process(attendanceRecords);
+                process(excellenceRecords);
+                return Object.entries(counts).sort(([,a], [,b]) => b - a).map(([name, count]) => ({ name, count }));
+            }, [attendanceRecords, excellenceRecords, startDate, endDate]);
             
             const exportCsv = () => {
                 let h, r, f;
-                if (type === 'attendance') { h = ["Date","Name","Grade","Status"]; r = [...abs.map(s=>[date,s.name,s.grade,"Absent"]), ...lat.map(s=>[date,s.name,s.grade,"Late"])]; f = `Att_${date}.csv`; }
-                else if (type === 'excellence') { h = ["Date","Name","Grade","Subject","Teacher"]; r = excRecs.map(x=>[x.date,x.studentName,x.grade,x.subject,x.teacherName]); f = `Exc_${date}.csv`; }
-                else { h = ["Name","Grade","Count","Subjects"]; r = multiExc.map(s=>[s.name,s.grade,s.count,s.subs]); f = `Multi_${minSub}.csv`; }
+                if (type === 'attendance') { 
+                    h = ["Date","Name","Grade","Status"]; 
+                    r = [
+                        ...abs.map(s=>[s.date, s.name, s.grade, "Absent"]), 
+                        ...lat.map(s=>[s.date, s.name, s.grade, "Late"])
+                    ];
+                    // sort by date
+                    r.sort((a,b) => a[0].localeCompare(b[0]));
+                    f = `Att_${startDate}_${endDate}.csv`; 
+                }
+                else if (type === 'excellence') { h = ["Date","Name","Grade","Subject","Teacher"]; r = excRecs.map(x=>[x.date,x.studentName,x.grade,x.subject,x.teacherName]); f = `Exc_${startDate}_${endDate}.csv`; }
+                else if (type === 'multi_excellence') { h = ["Name","Grade","Count","Subjects"]; r = multiExc.map(s=>[s.name,s.grade,s.count,s.subs]); f = `Multi_${minSub}_${startDate}_${endDate}.csv`; }
+                else if (type === 'teacher_activity') { h = ["Name","Count"]; r = teacherActivity.map(t=>[t.name,t.count]); f = `Teachers_${startDate}_${endDate}.csv`; }
+                
                 if(!r.length) return alert("Empty");
                 const csv = "\uFEFF" + [h, ...r].map(e => e.join(",")).join("\n");
                 const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = f; document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -390,12 +570,106 @@
 
             return (
                 <div className="space-y-6">
-                    <div className="flex flex-wrap gap-2 print-hidden"><button onClick={()=>setType('attendance')} className={`px-4 py-2 rounded font-bold ${type==='attendance'?'bg-emerald-600 text-white':'bg-white'}`}>غياب</button><button onClick={()=>setType('excellence')} className={`px-4 py-2 rounded font-bold ${type==='excellence'?'bg-purple-600 text-white':'bg-white'}`}>مجيدين</button><button onClick={()=>setType('multi_excellence')} className={`px-4 py-2 rounded font-bold ${type==='multi_excellence'?'bg-amber-500 text-white':'bg-white'}`}>متفوقين</button></div>
-                    <div className="flex flex-wrap gap-2 print-hidden items-center">{type!=='multi_excellence'&&<input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="p-2 border rounded bg-white"/>}<select value={grade} onChange={(e)=>setGrade(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select>{type==='excellence'&&<select value={subject} onChange={(e)=>setSubject(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل المواد</option>{subjects.map(s=><option key={s} value={s}>{s}</option>)}</select>}{type==='multi_excellence'&&<select value={minSub} onChange={(e)=>setMinSub(Number(e.target.value))} className="p-2 border rounded bg-amber-50 font-bold"><option value="2">مادتين+</option><option value="3">3+</option><option value="4">4+</option></select>}<button onClick={exportCsv} className="bg-green-700 text-white px-4 py-2 rounded">CSV</button><button onClick={()=>{window.focus();setTimeout(()=>window.print(),100)}} className="bg-slate-800 text-white px-4 py-2 rounded">طباعة</button></div>
-                    <div className="hidden print:block text-center text-xl font-bold mb-4">تقرير - {date}</div>
-                    {type==='attendance'&&<div className="grid md:grid-cols-2 gap-6"><div className="bg-white rounded shadow border-red-200"><div className="p-4 border-b bg-red-50 font-bold text-red-800">الغياب ({abs.length})</div><div className="p-4">{abs.length===0?'لا يوجد':abs.map(s=><div key={s.id} className="flex justify-between border-b py-2 last:border-0"><span>{s.name}</span><span className="text-sm text-slate-400">{s.grade}</span></div>)}</div></div><div className="bg-white rounded shadow border-amber-200"><div className="p-4 border-b bg-amber-50 font-bold text-amber-800">التأخير ({lat.length})</div><div className="p-4">{lat.length===0?'لا يوجد':lat.map(s=><div key={s.id} className="flex justify-between border-b py-2 last:border-0"><span>{s.name}</span><span className="text-sm text-slate-400">{s.grade}</span></div>)}</div></div></div>}
-                    {type==='excellence'&&<div className="bg-white rounded shadow border-purple-200"><div className="p-4 border-b bg-purple-50 font-bold text-purple-800">المجيدين ({excRecs.length})</div><div className="p-4"><table className="w-full text-right text-sm"><thead><tr className="border-b"><th>الاسم</th><th>الصف</th><th>المادة</th><th>المعلم</th></tr></thead><tbody>{excRecs.map((r,i)=><tr key={i} className="border-b last:border-0 py-2"><td>{r.studentName}</td><td>{r.grade}</td><td>{r.subject}</td><td>{r.teacherName}</td></tr>)}</tbody></table></div></div>}
-                    {type==='multi_excellence'&&<div className="bg-white rounded shadow border-amber-200"><div className="p-4 border-b bg-amber-50 font-bold text-amber-800">المتفوقين ({multiExc.length})</div><div className="p-4"><table className="w-full text-right text-sm"><thead><tr className="border-b"><th>الاسم</th><th>الصف</th><th>العدد</th><th>المواد</th></tr></thead><tbody>{multiExc.map((r,i)=><tr key={i} className="border-b last:border-0 py-2"><td>{r.name}</td><td>{r.grade}</td><td className="font-bold text-center">{r.count}</td><td className="text-xs text-slate-500">{r.subs}</td></tr>)}</tbody></table></div></div>}
+                    <div className="flex flex-wrap gap-2 print-hidden">
+                        <button onClick={()=>setType('attendance')} className={`px-4 py-2 rounded font-bold ${type==='attendance'?'bg-emerald-600 text-white':'bg-white'}`}>غياب (فترة)</button>
+                        <button onClick={()=>setType('excellence')} className={`px-4 py-2 rounded font-bold ${type==='excellence'?'bg-purple-600 text-white':'bg-white'}`}>مجيدين</button>
+                        <button onClick={()=>setType('multi_excellence')} className={`px-4 py-2 rounded font-bold ${type==='multi_excellence'?'bg-amber-500 text-white':'bg-white'}`}>متفوقين</button>
+                        <button onClick={()=>setType('teacher_activity')} className={`px-4 py-2 rounded font-bold ${type==='teacher_activity'?'bg-blue-600 text-white':'bg-white'}`}>نشاط المعلمين</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 print-hidden items-center bg-slate-100 p-3 rounded-lg">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold">من:</span><input type="date" value={startDate} onChange={(e)=>setStartDate(e.target.value)} className="p-2 border rounded bg-white"/>
+                            <span className="text-sm font-bold">إلى:</span><input type="date" value={endDate} onChange={(e)=>setEndDate(e.target.value)} className="p-2 border rounded bg-white"/>
+                        </div>
+                        
+                        {type !== 'teacher_activity' && (
+                            <select value={grade} onChange={(e)=>setGrade(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select>
+                        )}
+                        
+                        {type==='excellence' && <select value={subject} onChange={(e)=>setSubject(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل المواد</option>{subjects.map(s=><option key={s} value={s}>{s}</option>)}</select>}
+                        
+                        {type==='multi_excellence' && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold">عدد المواد:</span>
+                                <select value={minSub} onChange={(e)=>setMinSub(Number(e.target.value))} className="p-2 border rounded bg-amber-50 font-bold">
+                                    <option value="1">مادة واحدة+</option>
+                                    <option value="2">مادتين+</option>
+                                    <option value="3">3+</option>
+                                    <option value="4">4+</option>
+                                    <option value="5">5+</option>
+                                </select>
+                            </div>
+                        )}
+                        
+                        <div className="flex-1"></div>
+                        <button onClick={exportCsv} className="bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2"><Icon name="FileSpreadsheet" size={18}/> CSV</button>
+                        <button onClick={()=>{window.focus();setTimeout(()=>window.print(),100)}} className="bg-slate-800 text-white px-4 py-2 rounded flex items-center gap-2"><Icon name="Printer" size={18}/> طباعة</button>
+                    </div>
+
+                    <div className="hidden print:block text-center text-xl font-bold mb-4">
+                        تقرير {type === 'attendance' ? `الغياب للفترة من ${startDate} إلى ${endDate}` : `الفترة من ${startDate} إلى ${endDate}`}
+                    </div>
+
+                    {type==='attendance' && <div className="grid md:grid-cols-2 gap-6">
+                        <div className="bg-white rounded shadow border-red-200">
+                            <div className="p-4 border-b bg-red-50 font-bold text-red-800 flex justify-between"><span>الغياب</span> <span>{abs.length}</span></div>
+                            <div className="p-4 max-h-96 overflow-y-auto">
+                                {abs.length===0?'لا يوجد':abs.map(s=>(
+                                    <div key={s.recId} className="flex justify-between border-b py-2 last:border-0">
+                                        <div>
+                                            <div className="font-bold">{s.name}</div>
+                                            <div className="text-xs text-slate-500">{s.date}</div>
+                                        </div>
+                                        <span className="text-sm text-slate-400">{s.grade}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="bg-white rounded shadow border-amber-200">
+                            <div className="p-4 border-b bg-amber-50 font-bold text-amber-800 flex justify-between"><span>التأخير</span> <span>{lat.length}</span></div>
+                            <div className="p-4 max-h-96 overflow-y-auto">
+                                {lat.length===0?'لا يوجد':lat.map(s=>(
+                                    <div key={s.recId} className="flex justify-between border-b py-2 last:border-0">
+                                        <div>
+                                            <div className="font-bold">{s.name}</div>
+                                            <div className="text-xs text-slate-500">{s.date}</div>
+                                        </div>
+                                        <span className="text-sm text-slate-400">{s.grade}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>}
+
+                    {type==='excellence' && <div className="bg-white rounded shadow border-purple-200">
+                        <div className="p-4 border-b bg-purple-50 font-bold text-purple-800">المجيدين ({excRecs.length})</div>
+                        <div className="p-4 overflow-x-auto">
+                            <table className="w-full text-right text-sm">
+                                <thead><tr className="border-b"><th>التاريخ</th><th>الاسم</th><th>الصف</th><th>المادة</th><th>المعلم</th></tr></thead>
+                                <tbody>{excRecs.map((r,i)=><tr key={i} className="border-b last:border-0 py-2"><td>{r.date}</td><td>{r.studentName}</td><td>{r.grade}</td><td>{r.subject}</td><td>{r.teacherName}</td></tr>)}</tbody>
+                            </table>
+                        </div>
+                    </div>}
+
+                    {type==='multi_excellence' && <div className="bg-white rounded shadow border-amber-200">
+                        <div className="p-4 border-b bg-amber-50 font-bold text-amber-800">المتفوقين في {minSub} مواد فأكثر ({multiExc.length})</div>
+                        <div className="p-4 overflow-x-auto">
+                            <table className="w-full text-right text-sm">
+                                <thead><tr className="border-b"><th>الاسم</th><th>الصف</th><th>عدد المواد</th><th>المواد</th></tr></thead>
+                                <tbody>{multiExc.map((r,i)=><tr key={i} className="border-b last:border-0 py-2"><td>{r.name}</td><td>{r.grade}</td><td className="font-bold text-center">{r.count}</td><td className="text-xs text-slate-500">{r.subs}</td></tr>)}</tbody>
+                            </table>
+                        </div>
+                    </div>}
+
+                    {type==='teacher_activity' && <div className="bg-white rounded shadow border-blue-200">
+                        <div className="p-4 border-b bg-blue-50 font-bold text-blue-800">نشاط المعلمين ({teacherActivity.length})</div>
+                        <div className="p-4 overflow-x-auto">
+                            <table className="w-full text-right text-sm">
+                                <thead><tr className="border-b"><th>الترتيب</th><th>اسم المعلم</th><th>عدد العمليات (رصد/مجيدين)</th></tr></thead>
+                                <tbody>{teacherActivity.map((t,i)=><tr key={i} className="border-b last:border-0 py-2"><td className="font-bold text-blue-600">#{i+1}</td><td>{t.name}</td><td className="font-bold">{t.count}</td></tr>)}</tbody>
+                            </table>
+                        </div>
+                    </div>}
                 </div>
             );
         });
@@ -407,6 +681,7 @@
             const [userRole, setUserRole] = useState(null);
             const [activeTab, setActiveTab] = useState('dashboard');
             const [students, setStudents] = useState([]);
+            const [teachers, setTeachers] = useState([]);
             const [attendanceRecords, setAttendanceRecords] = useState([]);
             const [excellenceRecords, setExcellenceRecords] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -414,6 +689,8 @@
             const [teacherState, setTeacherState] = useState({ name: '', grade: '', session: '', subject: '' });
             const [authError, setAuthError] = useState(null);
             const [isOffline, setIsOffline] = useState(false);
+            const [dbError, setDbError] = useState(null);
+            const [saveStatus, setSaveStatus] = useState(''); // 'saving', 'success', 'error'
             
             useEffect(() => {
                 if (window.AppFirebase) setFirebaseReady(true);
@@ -427,15 +704,25 @@
                 const timer = setTimeout(() => { if(loading) setLoading(false); }, 4000);
                 signInAnonymously(auth).catch(err => {
                     console.error(err);
-                    setAuthError("وضع غير متصل"); setIsOffline(true); setUser({uid:'offline', isAnonymous:true});
+                    if(err.code === 'auth/configuration-not-found' || err.code === 'auth/operation-not-allowed' || err.code === 'auth/internal-error') {
+                        setAuthError("تنبيه: خدمة الدخول غير مفعلة. الوضع المحلي."); setIsOffline(true); setUser({uid:'offline', isAnonymous:true});
+                    }
                 });
-                return () => { clearTimeout(timer); onAuthStateChanged(auth, (u) => { if(!isOffline) setUser(u); }); };
+                return () => clearTimeout(timer);
             }, [firebaseReady]);
+            
+            useEffect(() => {
+                 if (!firebaseReady) return;
+                 const { auth, onAuthStateChanged } = window.AppFirebase;
+                 return onAuthStateChanged(auth, (u) => { if(!isOffline) setUser(u); });
+            }, [firebaseReady, isOffline]);
+
 
             useEffect(() => {
                 if (!user) return;
                 if (isOffline) {
                     setStudents(JSON.parse(localStorage.getItem('students')||'[]'));
+                    setTeachers(JSON.parse(localStorage.getItem('teachers')||'[]'));
                     setAttendanceRecords(JSON.parse(localStorage.getItem('attendance')||'[]'));
                     setExcellenceRecords(JSON.parse(localStorage.getItem('excellence')||'[]'));
                     setNewsText(localStorage.getItem('newsText')||'');
@@ -446,50 +733,114 @@
                 const u2 = onSnapshot(collection(db,'artifacts',appId,'public','data','attendance'), s => setAttendanceRecords(s.docs.map(d=>({id:d.id,...d.data()}))));
                 const u3 = onSnapshot(collection(db,'artifacts',appId,'public','data','excellence'), s => { setExcellenceRecords(s.docs.map(d=>({id:d.id,...d.data()}))); setLoading(false); });
                 const u4 = onSnapshot(doc(db,'artifacts',appId,'public','data','settings','config'), s => s.exists() && setNewsText(s.data().newsText));
-                return () => { u1(); u2(); u3(); u4(); };
+                const u5 = onSnapshot(collection(db,'artifacts',appId,'public','data','teachers'), s => setTeachers(s.docs.map(d=>({id:d.id,...d.data()}))));
+                return () => { u1(); u2(); u3(); u4(); u5(); };
             }, [user, isOffline]);
 
             const handleLogin = (role, password = "") => {
                 if (role === 'admin') {
                     if (password === 'akm1983') { setUserRole('admin'); setActiveTab('dashboard'); } 
                     else { alert('كلمة المرور خاطئة'); }
-                } else { setUserRole('teacher'); setActiveTab('attendance'); }
+                } else { 
+                    // For teachers, 'password' here is the file number passed from LoginScreen
+                    // Logic for verify teacher is handled inside LoginScreen or here if passed
+                }
             };
 
-            const handleLogout = () => { setUserRole(null); setActiveTab('dashboard'); setTeacherState({ name: '', grade: '', session: '', subject: '' }); };
+            const handleTeacherLogin = (fileNumber) => {
+                const teacher = teachers.find(t => t.id === fileNumber);
+                if (teacher) {
+                    setUserRole('teacher');
+                    setActiveTab('attendance');
+                    setTeacherState(prev => ({ ...prev, name: teacher.name !== 'معلم' ? teacher.name : '' }));
+                } else {
+                    alert('رقم الملف غير مسجل في النظام');
+                }
+            };
+
+            const handleLogout = () => {
+                setUserRole(null);
+                setActiveTab('dashboard');
+                setTeacherState({ name: '', grade: '', session: '', subject: '' });
+            };
+
+            // Helper to show save status
+            const withSaveStatus = async (promise) => {
+                setSaveStatus('saving');
+                try {
+                    await promise;
+                    setSaveStatus('success');
+                    setTimeout(() => setSaveStatus(''), 2000);
+                } catch (e) {
+                    setSaveStatus('error');
+                    console.error(e);
+                    alert("فشل الحفظ: تأكد من الاتصال بالإنترنت وقواعد الأمان");
+                    setTimeout(() => setSaveStatus(''), 3000);
+                    throw e;
+                }
+            };
 
             const actions = {
                 addStudent: async (d) => {
                     const s = {id:Date.now().toString(), ...d};
-                    // Optimistic for view
-                    setStudents(prev => [...prev, s].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
-                    if(isOffline){ localStorage.setItem('students',JSON.stringify([...students,s])); return; }
-                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; 
-                    await setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()});
+                    if(isOffline){ const n=[...students,s]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; await withSaveStatus(setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()}));
                 },
                 batchAdd: async (list) => {
-                    const newItems = list.map(i=>({id:Date.now().toString()+Math.random(),...i}));
-                    setStudents(prev => [...prev, ...newItems].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
-                    if(isOffline) { localStorage.setItem('students',JSON.stringify([...students, ...newItems])); return; }
+                    if(isOffline) { const n=[...students, ...list.map(i=>({id:Math.random().toString(),...i}))]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
                     const {db,collection,doc,writeBatch,serverTimestamp} = window.AppFirebase;
                     const batch = writeBatch(db);
                     list.forEach(i => batch.set(doc(collection(db,'artifacts',appId,'public','data','students')), {...i, createdAt: serverTimestamp()}));
-                    await batch.commit();
+                    await withSaveStatus(batch.commit());
                 },
                 deleteStudent: async (id) => {
-                    setStudents(prev => prev.filter(s=>s.id!==id));
-                    if(isOffline){ localStorage.setItem('students',JSON.stringify(students.filter(s=>s.id!==id))); return; }
-                    const {db,doc,deleteDoc} = window.AppFirebase; await deleteDoc(doc(db,'artifacts',appId,'public','data','students',id));
+                    const n = students.filter(s=>s.id!==id);
+                    if(isOffline){ setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const {db,doc,deleteDoc} = window.AppFirebase; await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','students',id)));
                 },
                 batchDelete: async (list) => {
                     setStudents(prev => prev.filter(s => !list.find(d => d.id === s.id)));
                     if(isOffline) { localStorage.setItem('students',JSON.stringify(students.filter(s => !list.find(d => d.id === s.id)))); return; }
                     const {db,doc,writeBatch} = window.AppFirebase;
                     const batchSize = 400; 
-                    for(let i=0;i<list.length;i+=batchSize) {
+                    const chunks = [];
+                    for(let i=0;i<list.length;i+=batchSize) chunks.push(list.slice(i,i+batchSize));
+                    
+                    for(const chunk of chunks) {
                         const batch = writeBatch(db);
-                        list.slice(i,i+batchSize).forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
+                        chunk.forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
                         await batch.commit();
+                    }
+                },
+                deleteAllAttendance: async () => {
+                    if (!confirm("هل أنت متأكد من مسح جميع سجلات الغياب ونشاط المعلمين؟ لا يمكن التراجع عن هذا الإجراء.")) return;
+                    
+                    // Optimistic update
+                    setAttendanceRecords([]);
+                    
+                    if (isOffline) {
+                        localStorage.setItem('attendance', '[]');
+                        return;
+                    }
+
+                    const { db, doc, writeBatch } = window.AppFirebase;
+                    const list = attendanceRecords;
+                    const batchSize = 400;
+                    
+                    setSaveStatus('saving');
+                    try {
+                        for (let i = 0; i < list.length; i += batchSize) {
+                            const batch = writeBatch(db);
+                            list.slice(i, i + batchSize).forEach(r => {
+                                batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', r.id));
+                            });
+                            await batch.commit();
+                        }
+                        setSaveStatus('success');
+                        setTimeout(() => setSaveStatus(''), 2000);
+                    } catch (e) {
+                        console.error(e);
+                        setSaveStatus('error');
                     }
                 },
                 updateAttendance: async (did, d) => {
@@ -510,18 +861,38 @@
                 updateNews: async (t) => {
                     if(isOffline){ setNewsText(t); localStorage.setItem('newsText',t); return; }
                     const {db,doc,setDoc} = window.AppFirebase; await setDoc(doc(db,'artifacts',appId,'public','data','settings','config'), {newsText:t}, {merge:true});
+                },
+                addTeacher: async (t) => {
+                    if(isOffline) return alert("غير متاح في الوضع المحلي");
+                    const {db,doc,setDoc,serverTimestamp} = window.AppFirebase; 
+                    // Use ID as document key for uniqueness
+                    await withSaveStatus(setDoc(doc(db,'artifacts',appId,'public','data','teachers', t.id), {...t, createdAt: serverTimestamp()}));
+                },
+                deleteTeacher: async (id) => {
+                    if(isOffline) return;
+                    const {db,doc,deleteDoc} = window.AppFirebase; 
+                    await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','teachers', id)));
                 }
             };
 
             if (!firebaseReady || (user && loading)) return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500 gap-3"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div><span>جاري التحميل...</span></div>;
 
-            if (!userRole) return <>{authError && <div className="bg-amber-100 p-2 text-center text-xs font-bold">{authError}</div>}<LoginScreen onLogin={handleLogin} newsText={newsText} Icon={Icon}/></>;
+            if (!userRole) return <>{authError && <div className="bg-amber-100 p-2 text-center text-xs font-bold">{authError}</div>}<LoginScreen onLogin={handleLogin} onTeacherLogin={handleTeacherLogin} newsText={newsText} Icon={Icon}/></>;
 
             return (
                 <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans print:block print:h-auto" dir="rtl">
-                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole} onLogout={handleLogout} Icon={Icon} />
+                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole} onLogout={handleLogout} Icon={Icon} dbError={dbError} studentsCount={students.length} />
                     <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen print:h-auto print:p-0 relative flex flex-col">
+                        {/* Status Bar */}
+                        <div className="absolute top-4 left-4 z-50 flex gap-2">
+                            {saveStatus === 'saving' && <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse"><Icon name="UploadCloud" size={14}/> جاري الحفظ...</span>}
+                            {saveStatus === 'success' && <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><Icon name="CheckCircle" size={14}/> تم الحفظ</span>}
+                            {saveStatus === 'error' && <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><Icon name="XCircle" size={14}/> فشل الحفظ</span>}
+                        </div>
+
                         {authError && <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-sm font-bold print-hidden">{authError}</div>}
+                        {dbError && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm font-bold print-hidden">{dbError} - يرجى التأكد من تفعيل قاعدة البيانات في Firebase Console -> Firestore Database -> Rules</div>}
+                        
                         <NewsTicker text={newsText} Icon={Icon} />
                         <div className="max-w-6xl mx-auto flex-1 w-full">
                             {activeTab === 'dashboard' && userRole === 'admin' && <DashboardView students={students} attendanceRecords={attendanceRecords} newsText={newsText} Icon={Icon} actions={actions} />}
@@ -529,6 +900,7 @@
                             {activeTab === 'attendance' && <AttendanceView students={students} attendanceRecords={attendanceRecords} userRole={userRole} teacherState={teacherState} setTeacherState={setTeacherState} Icon={Icon} actions={actions} />}
                             {activeTab === 'excellence' && <ExcellenceView students={students} userRole={userRole} teacherState={teacherState} setTeacherState={setTeacherState} excellenceRecords={excellenceRecords} Icon={Icon} actions={actions} />}
                             {activeTab === 'reports' && userRole === 'admin' && <ReportsView students={students} attendanceRecords={attendanceRecords} excellenceRecords={excellenceRecords} Icon={Icon} />}
+                            {activeTab === 'teachers' && userRole === 'admin' && <TeachersManagerView teachers={teachers} Icon={Icon} actions={actions} />}
                         </div>
                     </main>
                 </div>
