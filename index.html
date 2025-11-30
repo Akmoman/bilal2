@@ -59,7 +59,6 @@
             db = getFirestore(app);
             analytics = getAnalytics(app);
             
-            // محاولة تفعيل الكاش (Persistence)
             enableIndexedDbPersistence(db).catch((err) => {
                 if (err.code == 'failed-precondition') {
                     console.log('Persistence failed: Multiple tabs open');
@@ -81,7 +80,7 @@
     <!-- Application Code -->
     <script type="text/babel">
         const { useState, useEffect, useMemo, memo, useRef } = React;
-        const appId = 'bilal2-fd3e5'; // تم التحديث ليتطابق مع المشروع الجديد
+        const appId = 'bilal2-fd3e5';
 
         // --- Icons ---
         const Icon = memo(({ name, size = 24, className, ...props }) => {
@@ -260,6 +259,15 @@
                     await actions.deleteTeacher(id);
                 }
             };
+            
+            const delAll = async () => {
+                if(confirm('هل أنت متأكد من حذف جميع المعلمين؟ لا يمكن التراجع.')) {
+                    try {
+                        await actions.batchDeleteTeachers(teachers);
+                        alert("تم الحذف بنجاح");
+                    } catch(e) { alert("حدث خطأ"); }
+                }
+            };
 
             const handleBulkImport = async () => {
                 const ids = importIds.split('\n').map(s => s.trim()).filter(Boolean);
@@ -289,9 +297,14 @@
                 <div className="space-y-6">
                     <div className="flex justify-between items-center">
                         <h2 className="text-2xl font-bold text-slate-800">إدارة دخول المعلمين</h2>
-                        <button onClick={() => setShowImport(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors">
-                            <Icon name="UploadCloud" size={18} /> استيراد دفعة
-                        </button>
+                        <div className="flex gap-2">
+                             <button onClick={delAll} className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-red-200 transition-colors">
+                                <Icon name="Trash2" size={18} /> حذف الكل
+                            </button>
+                            <button onClick={() => setShowImport(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors">
+                                <Icon name="UploadCloud" size={18} /> استيراد دفعة
+                            </button>
+                        </div>
                     </div>
 
                     {/* Bulk Import Modal */}
@@ -803,13 +816,7 @@
                     setLoading(false); return;
                 }
                 const { db, collection, onSnapshot, doc } = window.AppFirebase;
-                const u1 = onSnapshot(collection(db,'artifacts',appId,'public','data','students'), 
-                    s => setStudents(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name,'ar'))),
-                    err => { 
-                        console.log("Students Sync Error", err); 
-                        if(err.code === 'permission-denied') setDbError("خطأ في الصلاحيات (Permission Denied)"); 
-                    }
-                );
+                const u1 = onSnapshot(collection(db,'artifacts',appId,'public','data','students'), s => setStudents(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name,'ar'))));
                 const u2 = onSnapshot(collection(db,'artifacts',appId,'public','data','attendance'), s => setAttendanceRecords(s.docs.map(d=>({id:d.id,...d.data()}))));
                 const u3 = onSnapshot(collection(db,'artifacts',appId,'public','data','excellence'), s => { setExcellenceRecords(s.docs.map(d=>({id:d.id,...d.data()}))); setLoading(false); });
                 const u4 = onSnapshot(doc(db,'artifacts',appId,'public','data','settings','config'), s => s.exists() && setNewsText(s.data().newsText));
@@ -863,41 +870,34 @@
             const actions = {
                 addStudent: async (d) => {
                     const s = {id:Date.now().toString(), ...d};
-                    // Optimistic
-                    setStudents(prev => [...prev, s].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
-                    if(isOffline){ localStorage.setItem('students',JSON.stringify([...students,s])); return; }
-                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; 
-                    await withSaveStatus(setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()}));
+                    if(isOffline){ const n=[...students,s]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; await withSaveStatus(setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()}));
                 },
                 batchAdd: async (list) => {
-                    const newItems = list.map(i=>({id:Date.now().toString()+Math.random(),...i}));
-                    setStudents(prev => [...prev, ...newItems].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
-                    if(isOffline) { localStorage.setItem('students',JSON.stringify([...students, ...newItems])); return; }
+                    if(isOffline) { const n=[...students, ...list.map(i=>({id:Math.random().toString(),...i}))]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
                     const {db,collection,doc,writeBatch,serverTimestamp} = window.AppFirebase;
                     const batch = writeBatch(db);
                     list.forEach(i => batch.set(doc(collection(db,'artifacts',appId,'public','data','students')), {...i, createdAt: serverTimestamp()}));
                     await withSaveStatus(batch.commit());
                 },
                 deleteStudent: async (id) => {
-                    setStudents(prev => prev.filter(s=>s.id!==id));
-                    if(isOffline){ localStorage.setItem('students',JSON.stringify(students.filter(s=>s.id!==id))); return; }
-                    const {db,doc,deleteDoc} = window.AppFirebase; 
-                    await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','students',id)));
+                    const n = students.filter(s=>s.id!==id);
+                    if(isOffline){ setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const {db,doc,deleteDoc} = window.AppFirebase; await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','students',id)));
                 },
                 batchDelete: async (list) => {
                     setStudents(prev => prev.filter(s => !list.find(d => d.id === s.id)));
                     if(isOffline) { localStorage.setItem('students',JSON.stringify(students.filter(s => !list.find(d => d.id === s.id)))); return; }
                     const {db,doc,writeBatch} = window.AppFirebase;
                     const batchSize = 400; 
-                    setSaveStatus('saving');
-                    try {
-                        for(let i=0;i<list.length;i+=batchSize) {
-                            const batch = writeBatch(db);
-                            list.slice(i,i+batchSize).forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
-                            await batch.commit();
-                        }
-                        setSaveStatus('success'); setTimeout(() => setSaveStatus(''), 2000);
-                    } catch(e) { setSaveStatus('error'); alert("فشل الحذف الجماعي"); }
+                    const chunks = [];
+                    for(let i=0;i<list.length;i+=batchSize) chunks.push(list.slice(i,i+batchSize));
+                    
+                    for(const chunk of chunks) {
+                        const batch = writeBatch(db);
+                        chunk.forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
+                        await batch.commit();
+                    }
                 },
                 deleteAllAttendance: async () => {
                     if (!confirm("هل أنت متأكد من مسح جميع سجلات الغياب ونشاط المعلمين؟ لا يمكن التراجع عن هذا الإجراء.")) return;
@@ -972,7 +972,16 @@
                     if(isOffline) return;
                     const {db,doc,deleteDoc} = window.AppFirebase; 
                     await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','teachers', id)));
-                }
+                },
+                batchDeleteTeachers: async (list) => {
+                    if(isOffline) return alert("غير متاح في الوضع المحلي");
+                    const {db,doc,writeBatch} = window.AppFirebase;
+                    const batch = writeBatch(db);
+                    list.forEach(t => {
+                        batch.delete(doc(db,'artifacts',appId,'public','data','teachers', t.id));
+                    });
+                    await withSaveStatus(batch.commit());
+                },
             };
 
             if (!firebaseReady || (user && loading)) return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500 gap-3"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div><span>جاري التحميل...</span></div>;
