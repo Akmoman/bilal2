@@ -81,7 +81,7 @@
     <!-- Application Code -->
     <script type="text/babel">
         const { useState, useEffect, useMemo, memo, useRef } = React;
-        const appId = 'bilal2-fd3e5';
+        const appId = 'bilal2-fd3e5'; // تم التحديث ليتطابق مع المشروع الجديد
 
         // --- Icons ---
         const Icon = memo(({ name, size = 24, className, ...props }) => {
@@ -241,6 +241,9 @@
         const TeachersManagerView = memo(({ teachers, Icon, actions }) => {
             const [fileNumber, setFileNumber] = useState('');
             const [name, setName] = useState('');
+            const [showImport, setShowImport] = useState(false);
+            const [importIds, setImportIds] = useState('');
+            const [importNames, setImportNames] = useState('');
             
             const add = async (e) => {
                 e.preventDefault();
@@ -258,9 +261,81 @@
                 }
             };
 
+            const handleBulkImport = async () => {
+                const ids = importIds.split('\n').map(s => s.trim()).filter(Boolean);
+                const names = importNames.split('\n').map(s => s.trim()).filter(Boolean);
+                
+                if (ids.length === 0) return alert("لا توجد أرقام ملفات");
+
+                // Zip them together. If name is missing, default to 'معلم'
+                const list = ids.map((id, index) => ({
+                    id: id,
+                    name: names[index] || 'معلم'
+                }));
+
+                try {
+                    await actions.batchAddTeachers(list);
+                    setImportIds('');
+                    setImportNames('');
+                    setShowImport(false);
+                    alert(`تم إضافة ${list.length} معلم بنجاح`);
+                } catch (e) {
+                    alert("حدث خطأ أثناء الاستيراد");
+                    console.error(e);
+                }
+            };
+
             return (
                 <div className="space-y-6">
-                    <h2 className="text-2xl font-bold text-slate-800">إدارة دخول المعلمين</h2>
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-slate-800">إدارة دخول المعلمين</h2>
+                        <button onClick={() => setShowImport(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors">
+                            <Icon name="UploadCloud" size={18} /> استيراد دفعة
+                        </button>
+                    </div>
+
+                    {/* Bulk Import Modal */}
+                    {showImport && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6 flex flex-col gap-4 h-[80vh]">
+                                <div className="flex justify-between items-center border-b pb-4">
+                                    <h3 className="font-bold text-lg">استيراد قائمة المعلمين</h3>
+                                    <button onClick={() => setShowImport(false)} className="text-slate-400 hover:text-red-500"><Icon name="X" size={24} /></button>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
+                                    <div className="flex flex-col h-full">
+                                        <label className="text-sm font-bold text-slate-700 mb-2">1. الصق أرقام الملفات هنا (سطر لكل رقم)</label>
+                                        <textarea 
+                                            value={importIds} 
+                                            onChange={(e) => setImportIds(e.target.value)} 
+                                            placeholder="مثال:\n1001\n1002\n1003" 
+                                            className="flex-1 p-3 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none bg-slate-50"
+                                        ></textarea>
+                                    </div>
+                                    <div className="flex flex-col h-full">
+                                        <label className="text-sm font-bold text-slate-700 mb-2">2. الصق الأسماء هنا (سطر لكل اسم)</label>
+                                        <textarea 
+                                            value={importNames} 
+                                            onChange={(e) => setImportNames(e.target.value)} 
+                                            placeholder="مثال:\nأحمد محمد\nسعيد علي\nخالد حسن" 
+                                            className="flex-1 p-3 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none bg-slate-50"
+                                        ></textarea>
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-800 border border-blue-100">
+                                    تأكد من أن ترتيب الأسماء يطابق ترتيب أرقام الملفات. سيتم دمج كل رقم مع الاسم المقابل له في نفس السطر.
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-2 border-t">
+                                    <button onClick={() => setShowImport(false)} className="px-6 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors">إلغاء</button>
+                                    <button onClick={handleBulkImport} className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors">حفظ القائمة</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="bg-white p-6 rounded-xl shadow-sm border">
                         <div className="flex gap-4 items-end mb-4">
                             <div className="flex-1">
@@ -399,12 +474,7 @@
             const nameInputRef = useRef(null);
 
             const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(), [students]);
-            
-            // FIXED: Define displayedStudents properly
-            const displayedStudents = useMemo(() => {
-                if (!filterGrade) return students;
-                return students.filter(s => s.grade === filterGrade);
-            }, [students, filterGrade]);
+            const displayedStudents = useMemo(() => filterGrade ? students.filter(s => s.grade === filterGrade) : students, [students, filterGrade]);
 
             const add = async (e) => { e.preventDefault(); if(!newName.trim()) return; await actions.addStudent({ name: newName, grade: newGrade || 'غير محدد' }); setNewName(''); setNewGrade(''); };
             const del = async (id) => { if(confirm('حذف؟')) await actions.deleteStudent(id); };
@@ -430,7 +500,7 @@
             return (
                 <div className="space-y-6">
                     <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">إدارة الطلاب</h2></div>
-                    {showImport && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-2xl p-6 flex flex-col gap-4 h-[80vh]"><h3 className="font-bold">استيراد</h3><input placeholder="صف موحد (اختياري)" onChange={(e)=>setBulkGrade(e.target.value)} className="p-2 border rounded"/><textarea placeholder="الأسماء..." value={importText} onChange={(e)=>setImportText(e.target.value)} className="flex-1 p-2 border rounded"/><div className="flex justify-end gap-2"><button onClick={()=>setShowImport(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={bulkImport} className="bg-emerald-600 text-white px-4 py-2 rounded">بدء الحفظ</button></div></div></div>}
+                    {showImport && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-2xl p-6 flex flex-col gap-4 h-[80vh]"><h3 className="font-bold">استيراد</h3><input placeholder="صف موحد (اختياري)" onChange={(e)=>setBulkGrade(e.target.value)} className="p-2 border rounded"/><textarea placeholder="الأسماء..." value={importText} onChange={(e)=>setImportText(e.target.value)} className="flex-1 p-2 border rounded"/><div className="flex justify-end gap-2"><button onClick={()=>setShowImport(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={bulkImport} disabled={processing} className="bg-emerald-600 text-white px-4 py-2 rounded">بدء الحفظ</button></div></div></div>}
                     {showDelAll && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><div className="text-red-600 font-bold mb-4">حذف الكل؟</div><button onClick={delAll} disabled={processing} className="bg-red-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'تأكيد'}</button><button onClick={()=>setShowDelAll(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
                     {showDelGrade && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><h3 className="font-bold mb-4">حذف صف</h3><select onChange={(e)=>setGradeToDelete(e.target.value)} className="w-full p-2 border mb-4"><option value="">اختر</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><button onClick={delGrade} disabled={processing} className="bg-amber-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'حذف'}</button><button onClick={()=>setShowDelGrade(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
 
@@ -577,10 +647,14 @@
                         <button onClick={()=>setType('teacher_activity')} className={`px-4 py-2 rounded font-bold ${type==='teacher_activity'?'bg-blue-600 text-white':'bg-white'}`}>نشاط المعلمين</button>
                     </div>
                     <div className="flex flex-wrap gap-2 print-hidden items-center bg-slate-100 p-3 rounded-lg">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold">من:</span><input type="date" value={startDate} onChange={(e)=>setStartDate(e.target.value)} className="p-2 border rounded bg-white"/>
-                            <span className="text-sm font-bold">إلى:</span><input type="date" value={endDate} onChange={(e)=>setEndDate(e.target.value)} className="p-2 border rounded bg-white"/>
-                        </div>
+                        {type === 'attendance' ? (
+                            <div className="flex items-center gap-2"><span className="text-sm font-bold">التاريخ:</span><input type="date" value={startDate} onChange={(e)=>setStartDate(e.target.value)} className="p-2 border rounded bg-white"/></div>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold">من:</span><input type="date" value={startDate} onChange={(e)=>setStartDate(e.target.value)} className="p-2 border rounded bg-white"/>
+                                <span className="text-sm font-bold">إلى:</span><input type="date" value={endDate} onChange={(e)=>setEndDate(e.target.value)} className="p-2 border rounded bg-white"/>
+                            </div>
+                        )}
                         
                         {type !== 'teacher_activity' && (
                             <select value={grade} onChange={(e)=>setGrade(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select>
@@ -729,7 +803,13 @@
                     setLoading(false); return;
                 }
                 const { db, collection, onSnapshot, doc } = window.AppFirebase;
-                const u1 = onSnapshot(collection(db,'artifacts',appId,'public','data','students'), s => setStudents(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name,'ar'))));
+                const u1 = onSnapshot(collection(db,'artifacts',appId,'public','data','students'), 
+                    s => setStudents(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name,'ar'))),
+                    err => { 
+                        console.log("Students Sync Error", err); 
+                        if(err.code === 'permission-denied') setDbError("خطأ في الصلاحيات (Permission Denied)"); 
+                    }
+                );
                 const u2 = onSnapshot(collection(db,'artifacts',appId,'public','data','attendance'), s => setAttendanceRecords(s.docs.map(d=>({id:d.id,...d.data()}))));
                 const u3 = onSnapshot(collection(db,'artifacts',appId,'public','data','excellence'), s => { setExcellenceRecords(s.docs.map(d=>({id:d.id,...d.data()}))); setLoading(false); });
                 const u4 = onSnapshot(doc(db,'artifacts',appId,'public','data','settings','config'), s => s.exists() && setNewsText(s.data().newsText));
@@ -783,34 +863,41 @@
             const actions = {
                 addStudent: async (d) => {
                     const s = {id:Date.now().toString(), ...d};
-                    if(isOffline){ const n=[...students,s]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
-                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; await withSaveStatus(setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()}));
+                    // Optimistic
+                    setStudents(prev => [...prev, s].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
+                    if(isOffline){ localStorage.setItem('students',JSON.stringify([...students,s])); return; }
+                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; 
+                    await withSaveStatus(setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()}));
                 },
                 batchAdd: async (list) => {
-                    if(isOffline) { const n=[...students, ...list.map(i=>({id:Math.random().toString(),...i}))]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const newItems = list.map(i=>({id:Date.now().toString()+Math.random(),...i}));
+                    setStudents(prev => [...prev, ...newItems].sort((a,b)=>a.name.localeCompare(b.name,'ar')));
+                    if(isOffline) { localStorage.setItem('students',JSON.stringify([...students, ...newItems])); return; }
                     const {db,collection,doc,writeBatch,serverTimestamp} = window.AppFirebase;
                     const batch = writeBatch(db);
                     list.forEach(i => batch.set(doc(collection(db,'artifacts',appId,'public','data','students')), {...i, createdAt: serverTimestamp()}));
                     await withSaveStatus(batch.commit());
                 },
                 deleteStudent: async (id) => {
-                    const n = students.filter(s=>s.id!==id);
-                    if(isOffline){ setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
-                    const {db,doc,deleteDoc} = window.AppFirebase; await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','students',id)));
+                    setStudents(prev => prev.filter(s=>s.id!==id));
+                    if(isOffline){ localStorage.setItem('students',JSON.stringify(students.filter(s=>s.id!==id))); return; }
+                    const {db,doc,deleteDoc} = window.AppFirebase; 
+                    await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','students',id)));
                 },
                 batchDelete: async (list) => {
                     setStudents(prev => prev.filter(s => !list.find(d => d.id === s.id)));
                     if(isOffline) { localStorage.setItem('students',JSON.stringify(students.filter(s => !list.find(d => d.id === s.id)))); return; }
                     const {db,doc,writeBatch} = window.AppFirebase;
                     const batchSize = 400; 
-                    const chunks = [];
-                    for(let i=0;i<list.length;i+=batchSize) chunks.push(list.slice(i,i+batchSize));
-                    
-                    for(const chunk of chunks) {
-                        const batch = writeBatch(db);
-                        chunk.forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
-                        await batch.commit();
-                    }
+                    setSaveStatus('saving');
+                    try {
+                        for(let i=0;i<list.length;i+=batchSize) {
+                            const batch = writeBatch(db);
+                            list.slice(i,i+batchSize).forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
+                            await batch.commit();
+                        }
+                        setSaveStatus('success'); setTimeout(() => setSaveStatus(''), 2000);
+                    } catch(e) { setSaveStatus('error'); alert("فشل الحذف الجماعي"); }
                 },
                 deleteAllAttendance: async () => {
                     if (!confirm("هل أنت متأكد من مسح جميع سجلات الغياب ونشاط المعلمين؟ لا يمكن التراجع عن هذا الإجراء.")) return;
@@ -867,6 +954,19 @@
                     const {db,doc,setDoc,serverTimestamp} = window.AppFirebase; 
                     // Use ID as document key for uniqueness
                     await withSaveStatus(setDoc(doc(db,'artifacts',appId,'public','data','teachers', t.id), {...t, createdAt: serverTimestamp()}));
+                },
+                batchAddTeachers: async (list) => {
+                    if(isOffline) return alert("غير متاح في الوضع المحلي");
+                    const {db,doc,writeBatch,serverTimestamp} = window.AppFirebase;
+                    const batch = writeBatch(db);
+                    list.forEach(t => {
+                        batch.set(doc(db,'artifacts',appId,'public','data','teachers', t.id), {
+                            id: t.id,
+                            name: t.name,
+                            createdAt: serverTimestamp()
+                        });
+                    });
+                    await withSaveStatus(batch.commit());
                 },
                 deleteTeacher: async (id) => {
                     if(isOffline) return;
