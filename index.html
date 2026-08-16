@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام مدرسة بلال بن رباح للتعليم الأساسي</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Styles -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+        body { font-family: 'Tajawal', sans-serif; background-color: #f8fafc; }
+        @keyframes marquee { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        .animate-marquee { display: inline-block; white-space: nowrap; animation: marquee 25s linear infinite; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 100%; line-height: 1; text-align: center; }
+        
+        /* تحسينات الطباعة لإصلاح مشكلة قص الصفحات */
+        @media print { 
+            @page { size: A4; margin: 15mm; } 
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white !important; } 
+            /* إجبار جميع العناصر الحاوية على التمدد وإلغاء التمرير */
+            html, body, #root, main, .overflow-y-auto, .overflow-x-auto, .max-h-96, .h-screen { 
+                height: auto !important; 
+                max-height: none !important;
+                overflow: visible !important; 
+                display: block !important; 
+                position: static !important; 
+            } 
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+            tr { page-break-inside: avoid; } 
+            .page-break { page-break-before: always; }
+            /* إخفاء الأشرطة الجانبية والأزرار كلياً أثناء الطباعة */
+            .print\:hidden { display: none !important; }
+        }
+
+        .prose h1 { font-size: 1.5em; font-weight: bold; margin-bottom: 0.5em; color: #065f46; }
+        .prose h2 { font-size: 1.25em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; color: #047857; }
+        .prose ul { list-style-type: disc; padding-right: 1.5em; margin-bottom: 1em; }
+        .prose li { margin-bottom: 0.25em; }
+        .prose p { margin-bottom: 0.75em; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Firebase SDKs & Initialization -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch, enableIndexedDbPersistence, runTransaction, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBL0Avelv5T9pzolNi_Nl3K3KfgV6D3bY0",
+            authDomain: "bilal2-fd3e5.firebaseapp.com",
+            projectId: "bilal2-fd3e5",
+            storageBucket: "bilal2-fd3e5.firebasestorage.app",
+            messagingSenderId: "453026971566",
+            appId: "1:453026971566:web:b4b9145b5ecb30b446d23f",
+            measurementId: "G-HQ8QTKMHMY"
+        };
+
+        let app, auth, db, analytics;
+        let initError = null;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            analytics = getAnalytics(app);
+            
+            enableIndexedDbPersistence(db).catch((err) => {
+                if (err.code == 'failed-precondition') {
+                    console.log('Persistence failed: Multiple tabs open');
+                } else if (err.code == 'unimplemented') {
+                    console.log('Persistence not supported');
+                }
+            });
+
+            console.log("Firebase Initialized");
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+            initError = e;
+        }
+
+        window.AppFirebase = { app, auth, db, initError, signInAnonymously, onAuthStateChanged, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, writeBatch, runTransaction, getDoc };
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
+    <!-- Application Code -->
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, memo, useRef } = React;
+        const appId = 'bilal2-fd3e5';
+
+        // --- Helper: Grade Sorter ---
+        const gradeOrder = {
+            'الخامس': 5, 'خامس': 5, '5': 5,
+            'السادس': 6, 'سادس': 6, '6': 6,
+            'السابع': 7, 'سابع': 7, '7': 7,
+            'الثامن': 8, 'ثامن': 8, '8': 8,
+            'التاسع': 9, 'تاسع': 9, '9': 9,
+            'العاشر': 10, 'عاشر': 10, '10': 10,
+            'الحادي عشر': 11, 'حادي عشر': 11, '11': 11,
+            'الثاني عشر': 12, 'ثاني عشر': 12, '12': 12
+        };
+
+        const sortGrades = (a, b) => {
+            const getBaseGrade = (g) => {
+                if (!g) return '';
+                return g.split('/')[0].trim();
+            };
+            const orderA = gradeOrder[getBaseGrade(a)] || 99;
+            const orderB = gradeOrder[getBaseGrade(b)] || 99;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.localeCompare(b, 'ar');
+        };
+
+        // --- Helper: Sessions (Periods) & Per-Session Attendance Logic ---
+        const SESSIONS = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة"];
+        const ADMIN_SESSION = "تصحيح الإدارة";
+        const getSessionIndex = (session) => {
+            const idx = SESSIONS.indexOf(session);
+            return idx === -1 ? -1 : idx;
+        };
+
+        const computeDailyStatus = (records) => {
+            if (!records || records.length === 0) return null;
+            const override = records.find(r => r.session === ADMIN_SESSION);
+            if (override) return override.status;
+
+            const sorted = [...records].sort((a, b) => getSessionIndex(a.session) - getSessionIndex(b.session));
+            const hasAbsent = sorted.some(r => r.status === 'absent');
+            if (!hasAbsent) return sorted[sorted.length - 1].status;
+
+            const last = sorted[sorted.length - 1];
+            const earlier = sorted.slice(0, -1);
+
+            if (last.status === 'absent') {
+                const wasPresentEarlier = earlier.some(r => r.status === 'present' || r.status === 'late');
+                return wasPresentEarlier ? 'runaway' : 'absent';
+            }
+            const wasAbsentEarlier = earlier.some(r => r.status === 'absent');
+            return wasAbsentEarlier ? 'late' : last.status;
+        };
+
+        const buildDailyAttendanceMap = (attendanceRecords) => {
+            const groups = {};
+            attendanceRecords.forEach(r => {
+                const key = `${r.date}_${r.studentId}`;
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(r);
+            });
+            const daily = {};
+            Object.values(groups).forEach(recs => {
+                const { date, studentId } = recs[0];
+                if (!daily[date]) daily[date] = {};
+                daily[date][studentId] = {
+                    status: computeDailyStatus(recs),
+                    sessionRecords: [...recs].sort((a, b) => getSessionIndex(a.session) - getSessionIndex(b.session))
+                };
+            });
+            return daily;
+        };
+
+        // --- Icons ---
+        const Icon = memo(({ name, size = 24, className, ...props }) => {
+            const icons = {
+                School: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M14 22v-4a2 2 0 1 0-4 0v4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M18 5v17"/><path d="m4 6 8-4 8 4"/><path d="M6 5v17"/><circle cx="12" cy="9" r="2"/></svg>,
+                Users: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+                Calendar: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>,
+                ClipboardList: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>,
+                BarChart3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>,
+                Plus: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+                Trash2: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
+                Save: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+                CheckCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
+                XCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>,
+                Clock: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+                Search: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+                Lock: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+                UserCheck: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>,
+                LogOut: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>,
+                Printer: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>,
+                FileSpreadsheet: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>,
+                UploadCloud: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>,
+                X: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+                Megaphone: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>,
+                Edit3: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>,
+                AlertCircle: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>,
+                Award: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>,
+                Star: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+                UserMinus: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" x2="16" y1="11" y2="11"/></svg>,
+                WifiOff: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><line x1="1" x2="23" y1="1" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" x2="12.01" y1="20" y2="20"/></svg>,
+                Wifi: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" x2="12.01" y1="20" y2="20"/></svg>,
+                Key: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><path d="m21 2-2 2m-7.6 7.6a6 6 0 1 1 2.4-8 6 6 0 0 1-2.4 8Zm-.8 2.4L5 21l-3-3 3-3h3l3 3"/></svg>,
+                LockKeyhole: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>,
+                UnlockKeyhole: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0 1 9.33-2.5"/></svg>
+            };
+            return icons[name] || <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}><circle cx="12" cy="12" r="10"/></svg>;
+        });
+
+        // --- Sub-Components ---
+        const NewsTicker = memo(({ text }) => (
+            <div className="bg-emerald-800 text-white overflow-hidden relative shadow-md print:hidden h-12 flex-shrink-0 w-full border-b border-emerald-700">
+                <div className="flex items-center h-full w-full">
+                    <div className="bg-emerald-900 h-full flex items-center px-4 gap-2 z-20 shadow-xl flex-shrink-0 relative min-w-fit">
+                        <Icon name="Megaphone" size={20} className="text-yellow-400 animate-pulse" />
+                        <span className="font-bold text-sm hidden sm:inline border-l border-emerald-700 pl-3">إعلانات المدرسة:</span>
+                    </div>
+                    <div className="flex-1 overflow-hidden relative h-full flex items-center bg-emerald-800">
+                        <div className="w-full h-full relative flex items-center justify-center">
+                            <div className="animate-marquee text-base font-bold text-center whitespace-nowrap">{text && text.trim() !== "" ? text : "مرحباً بكم في مدرسة بلال بن رباح للتعليم الأساسي - نظام إدارة الحضور والغياب"}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ));
+
+        const LoginScreen = memo(({ onLogin, onTeacherLogin, newsText }) => {
+            const [password, setPassword] = useState('');
+            const [showAdminInput, setShowAdminInput] = useState(false);
+            const [showTeacherInput, setShowTeacherInput] = useState(false);
+            const [fileNumber, setFileNumber] = useState('');
+
+            const handleTeacherSubmit = () => {
+                if (!fileNumber.trim()) {
+                    alert("الرجاء إدخال رقم الملف");
+                    return;
+                }
+                onTeacherLogin(fileNumber.trim());
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-100 flex flex-col" dir="rtl">
+                    <NewsTicker text={newsText} />
+                    <div className="flex-1 flex items-center justify-center p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+                            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600"><Icon name="School" size={40} /></div>
+                            <h1 className="text-2xl font-bold text-slate-800 mb-2">مدرسة بلال بن رباح</h1>
+                            <p className="text-slate-500 mb-8">نظام رصد الحضور والغياب والمجيدين</p>
+                            
+                            {!showAdminInput && !showTeacherInput ? (
+                                <div className="space-y-4">
+                                    <button onClick={() => setShowTeacherInput(true)} className="w-full py-4 px-6 bg-white border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 rounded-xl flex items-center gap-4 transition-all group">
+                                        <div className="bg-emerald-100 p-3 rounded-full text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors"><Icon name="UserCheck" size={24} /></div>
+                                        <div className="text-right"><div className="font-bold text-slate-800">دخول المعلمين</div><div className="text-xs text-slate-500">رصد الغياب / المجيدين</div></div>
+                                    </button>
+                                    <button onClick={() => setShowAdminInput(true)} className="w-full py-4 px-6 bg-white border-2 border-slate-100 hover:border-slate-400 hover:bg-slate-50 rounded-xl flex items-center gap-4 transition-all group">
+                                        <div className="bg-slate-100 p-3 rounded-full text-slate-600 group-hover:bg-slate-600 group-hover:text-white transition-colors"><Icon name="Lock" size={24} /></div>
+                                        <div className="text-right"><div className="font-bold text-slate-800">دخول الإدارة</div><div className="text-xs text-slate-500">التحكم بالصلاحيات والتقارير</div></div>
+                                    </button>
+                                    <p className="text-emerald-600 font-bold mt-4 text-sm">تصميم: أ.عبدالله بن خلف الرواحي</p>
+                                </div>
+                            ) : showTeacherInput ? (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <h3 className="font-bold text-slate-700 mb-4">تسجيل دخول المعلم</h3>
+                                    <input type="text" value={fileNumber} onChange={(e) => setFileNumber(e.target.value)} placeholder="أدخل رقم الملف" className="w-full p-3 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg" autoFocus />
+                                    <div className="flex gap-2">
+                                        <button onClick={handleTeacherSubmit} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition-colors">دخول</button>
+                                        <button onClick={() => { setShowTeacherInput(false); setFileNumber(''); }} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">إلغاء</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="animate-in fade-in slide-in-from-bottom-4">
+                                    <h3 className="font-bold text-slate-700 mb-4">كلمة مرور الإدارة</h3>
+                                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="أدخل كلمة المرور" className="w-full p-3 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-emerald-500 outline-none text-center text-lg" autoFocus />
+                                    <div className="flex gap-2">
+                                        <button onClick={() => onLogin('admin', password)} className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition-colors">دخول</button>
+                                        <button onClick={() => { setShowAdminInput(false); setPassword(''); }} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg">إلغاء</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const Sidebar = memo(({ activeTab, setActiveTab, userRole, onLogout, dbError, studentsCount }) => (
+            <div className="w-full md:w-64 bg-slate-800 text-white flex-shrink-0 md:min-h-screen flex flex-col print:hidden">
+                <div className="p-6 border-b border-slate-700 flex items-center gap-3">
+                    <Icon name="School" size={32} className="text-emerald-400" />
+                    <div>
+                        <h1 className="font-bold text-lg leading-tight">بلال بن رباح</h1>
+                        <p className="text-xs text-slate-400">{userRole === 'admin' ? 'لوحة الإدارة' : 'لوحة المعلم'}</p>
+                        <div className="text-[10px] text-emerald-200 mt-1 font-medium">تصميم: أ.عبدالله بن خلف الرواحي</div>
+                    </div>
+                </div>
+                <div className="px-6 py-2 flex flex-col gap-1 text-xs border-b border-slate-700">
+                    <div className="flex items-center gap-2">
+                        {dbError ? <><Icon name="WifiOff" size={14} className="text-red-500" /><span className="text-red-400">غير متصل</span></> : <><Icon name="Wifi" size={14} className="text-green-400" /><span className="text-green-400">متصل (Firebase)</span></>}
+                    </div>
+                    {studentsCount !== undefined && <div className="text-slate-400">الطلاب: {studentsCount}</div>}
+                </div>
+                <nav className="flex-1 p-4 space-y-2">
+                    {userRole === 'admin' && <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="BarChart3" size={18} /> <span className="font-medium">لوحة المعلومات</span></button>}
+                    <button onClick={() => setActiveTab('attendance')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'attendance' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="ClipboardList" size={18} /> <span className="font-medium">رصد الغياب</span></button>
+                    <button onClick={() => setActiveTab('excellence')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'excellence' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Star" size={18} /> <span className="font-medium">رصد المجيدين</span></button>
+                    {userRole === 'admin' && <>
+                        <button onClick={() => setActiveTab('students')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'students' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Users" size={18} /> <span className="font-medium">الطلاب</span></button>
+                        <button onClick={() => setActiveTab('teachers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'teachers' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Key" size={18} /> <span className="font-medium">إدارة المعلمين</span></button>
+                        <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'}`}><Icon name="Calendar" size={18} /> <span className="font-medium">التقارير</span></button>
+                    </>}
+                </nav>
+                <div className="p-4 border-t border-slate-700"><button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 text-red-300 hover:bg-slate-700 hover:text-red-200 rounded-lg transition-colors text-sm"><Icon name="LogOut" size={16} /> تسجيل خروج</button></div>
+            </div>
+        ));
+
+        const TeachersManagerView = memo(({ teachers, actions }) => {
+            const [fileNumber, setFileNumber] = useState('');
+            const [name, setName] = useState('');
+            const [showImport, setShowImport] = useState(false);
+            const [importIds, setImportIds] = useState('');
+            const [importNames, setImportNames] = useState('');
+            
+            const add = async (e) => {
+                e.preventDefault();
+                if(!fileNumber.trim()) return alert("الرجاء إدخال رقم الملف");
+                try {
+                    await actions.addTeacher({ id: fileNumber.trim(), name: name.trim() || 'معلم' });
+                    setFileNumber(''); setName('');
+                    alert("تمت الإضافة بنجاح");
+                } catch(e) { alert("خطأ في الإضافة"); }
+            };
+
+            const del = async (id) => {
+                if(confirm('هل أنت متأكد من حذف هذا المعلم؟')) {
+                    await actions.deleteTeacher(id);
+                }
+            };
+            
+            const delAll = async () => {
+                if(confirm('هل أنت متأكد من حذف جميع المعلمين؟ لا يمكن التراجع.')) {
+                    try {
+                        await actions.batchDeleteTeachers(teachers);
+                        alert("تم الحذف بنجاح");
+                    } catch(e) { alert("حدث خطأ"); }
+                }
+            };
+
+            const handleBulkImport = async () => {
+                const ids = importIds.split('\n').map(s => s.trim()).filter(Boolean);
+                const names = importNames.split('\n').map(s => s.trim()).filter(Boolean);
+                
+                if (ids.length === 0) return alert("لا توجد أرقام ملفات");
+
+                const list = ids.map((id, index) => ({
+                    id: id,
+                    name: names[index] || 'معلم'
+                }));
+
+                try {
+                    await actions.batchAddTeachers(list);
+                    setImportIds('');
+                    setImportNames('');
+                    setShowImport(false);
+                    alert(`تم إضافة ${list.length} معلم بنجاح`);
+                } catch (e) {
+                    alert("حدث خطأ أثناء الاستيراد");
+                    console.error(e);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center print:hidden">
+                        <h2 className="text-2xl font-bold text-slate-800">إدارة دخول المعلمين</h2>
+                        <div className="flex gap-2">
+                             <button onClick={delAll} className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-red-200 transition-colors">
+                                <Icon name="Trash2" size={18} /> حذف الكل
+                            </button>
+                            <button onClick={() => setShowImport(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors">
+                                <Icon name="UploadCloud" size={18} /> استيراد دفعة
+                            </button>
+                        </div>
+                    </div>
+
+                    {showImport && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm print:hidden">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6 flex flex-col gap-4 h-[80vh]">
+                                <div className="flex justify-between items-center border-b pb-4">
+                                    <h3 className="font-bold text-lg">استيراد قائمة المعلمين</h3>
+                                    <button onClick={() => setShowImport(false)} className="text-slate-400 hover:text-red-500"><Icon name="X" size={24} /></button>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
+                                    <div className="flex flex-col h-full">
+                                        <label className="text-sm font-bold text-slate-700 mb-2">1. الصق أرقام الملفات هنا (سطر لكل رقم)</label>
+                                        <textarea 
+                                            value={importIds} 
+                                            onChange={(e) => setImportIds(e.target.value)} 
+                                            placeholder="مثال:\n1001\n1002\n1003" 
+                                            className="flex-1 p-3 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none bg-slate-50"
+                                        ></textarea>
+                                    </div>
+                                    <div className="flex flex-col h-full">
+                                        <label className="text-sm font-bold text-slate-700 mb-2">2. الصق الأسماء هنا (سطر لكل اسم)</label>
+                                        <textarea 
+                                            value={importNames} 
+                                            onChange={(e) => setImportNames(e.target.value)} 
+                                            placeholder="مثال:\nأحمد محمد\nسعيد علي\nخالد حسن" 
+                                            className="flex-1 p-3 border border-slate-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none bg-slate-50"
+                                        ></textarea>
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-800 border border-blue-100">
+                                    تأكد من أن ترتيب الأسماء يطابق ترتيب أرقام الملفات. سيتم دمج كل رقم مع الاسم المقابل له في نفس السطر.
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-2 border-t">
+                                    <button onClick={() => setShowImport(false)} className="px-6 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors">إلغاء</button>
+                                    <button onClick={handleBulkImport} className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors">حفظ القائمة</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm border print:hidden">
+                        <div className="flex gap-4 items-end mb-4">
+                            <div className="flex-1">
+                                <label className="text-xs font-bold mb-1 block">رقم الملف (كلمة المرور)</label>
+                                <input value={fileNumber} onChange={(e)=>setFileNumber(e.target.value)} className="w-full p-2 border rounded" placeholder="مثال: 1234"/>
+                            </div>
+                            <div className="flex-1">
+                                <label className="text-xs font-bold mb-1 block">اسم المعلم (اختياري)</label>
+                                <input value={name} onChange={(e)=>setName(e.target.value)} className="w-full p-2 border rounded" placeholder="الاسم"/>
+                            </div>
+                            <button onClick={add} className="bg-emerald-600 text-white px-6 py-2 rounded font-bold h-10">إضافة صلاحية</button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <div className="p-4 border-b bg-slate-50 font-bold">المعلمين المصرح لهم ({teachers.length})</div>
+                        <div className="divide-y">
+                            {teachers.length === 0 ? <div className="p-8 text-center text-slate-400">لا يوجد معلمين مسجلين</div> : 
+                            teachers.map(t => (
+                                <div key={t.id} className="p-4 flex justify-between items-center hover:bg-slate-50">
+                                    <div>
+                                        <div className="font-bold flex items-center gap-2"><Icon name="Key" size={16} className="text-emerald-500"/> {t.id}</div>
+                                        <div className="text-xs text-slate-500">{t.name}</div>
+                                    </div>
+                                    <button onClick={()=>del(t.id)} className="text-red-400 hover:bg-red-50 p-2 rounded print:hidden"><Icon name="Trash2" size={18}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const DashboardView = memo(({ students, attendanceRecords, newsText, actions, isExcellenceLocked, quizWindows }) => {
+            const today = new Date().toISOString().split('T')[0];
+            const [isEditingNews, setIsEditingNews] = useState(false);
+            const [tempNews, setTempNews] = useState(newsText || "");
+
+            useEffect(() => setTempNews(newsText || ""), [newsText]);
+
+            const dailyMap = useMemo(() => buildDailyAttendanceMap(attendanceRecords), [attendanceRecords]);
+
+            const stats = useMemo(() => {
+                const todayData = dailyMap[today] || {};
+                const statuses = Object.values(todayData).map(i => i.status);
+                const total = students.length;
+                const present = statuses.filter(s => s === 'present').length;
+                const absent = statuses.filter(s => s === 'absent').length;
+                const late = statuses.filter(s => s === 'late').length;
+                const runaway = statuses.filter(s => s === 'runaway').length;
+                const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+                return { total, present, absent, late, runaway, rate };
+            }, [students, dailyMap, today]);
+
+            const missingAttendanceGrades = useMemo(() => {
+                const allGrades = [...new Set(students.map(s => s.grade))].filter(g => g && g !== 'غير محدد').sort(sortGrades);
+                const recordedGrades = new Set(
+                    attendanceRecords
+                        .filter(r => r.date === today)
+                        .map(r => r.grade)
+                );
+                return allGrades.filter(g => !recordedGrades.has(g));
+            }, [students, attendanceRecords]);
+
+            const handleSaveNews = async () => {
+                try { await actions.updateNews(tempNews); setIsEditingNews(false); alert('تم التحديث'); } catch (e) { alert('خطأ'); }
+            };
+            const topTeachers = useMemo(() => {
+                const stats = {}; attendanceRecords.forEach(r => { if (r.teacherName && typeof r.teacherName === 'string' && r.teacherName.trim()) { const n = r.teacherName.trim(); stats[n] = (stats[n] || 0) + 1; } });
+                return Object.entries(stats).sort(([, a], [, b]) => b - a).slice(0, 5);
+            }, [attendanceRecords]);
+            const mostAbsentStudents = useMemo(() => {
+                const stats = {};
+                Object.values(dailyMap).forEach(dayStudents => {
+                    Object.entries(dayStudents).forEach(([sid, info]) => {
+                        if (info.status === 'absent') stats[sid] = (stats[sid] || 0) + 1;
+                    });
+                });
+                return Object.entries(stats).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id, c]) => { const s = students.find(s => s.id === id); return s ? { ...s, count: c } : null; }).filter(Boolean);
+            }, [dailyMap, students]);
+
+            const isQuizActive = Boolean(quizWindows?.quiz1?.isOpen || quizWindows?.quiz2?.isOpen);
+            const isMarkingOpenForTeachers = !isExcellenceLocked || isQuizActive;
+
+            const Stat = ({ title, value, color, iconName }) => (<div className={`${color} text-white p-6 rounded-xl shadow-md flex justify-between items-center`}><div><p className="text-sm opacity-90 mb-1">{title}</p><p className="text-3xl font-bold">{value}</p></div><div className="opacity-20 transform scale-150"><Icon name={iconName} size={24} /></div></div>);
+
+            return (
+                <div className="space-y-6 animate-in fade-in duration-500">
+                    <div className="flex justify-between items-center flex-wrap gap-4 print:hidden">
+                        <h2 className="text-2xl font-bold text-slate-800">لوحة المعلومات</h2>
+                        <div className="flex gap-2 flex-wrap items-center">
+                            <button 
+                                onClick={actions.toggleExcellenceLock} 
+                                className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all shadow-sm ${!isExcellenceLocked ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'}`}>
+                                <Icon name={!isExcellenceLocked ? "UnlockKeyhole" : "LockKeyhole"} size={20} /> 
+                                {!isExcellenceLocked ? 'صلاحية المجيدين: مفعلة ومتاحة' : 'صلاحية المجيدين: مقفلة على المعلمين'}
+                            </button>
+                            <button onClick={actions.deleteAllAttendance} className="bg-red-100 text-red-600 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-red-200 transition-colors"><Icon name="Trash2" size={20} /> تصفير سجلات الغياب</button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8"><Stat title="إجمالي الطلاب" value={stats.total} color="bg-blue-500" iconName="Users" /><Stat title="نسبة الحضور" value={`${stats.rate}%`} color="bg-emerald-500" iconName="CheckCircle" /><Stat title="الغياب اليوم" value={stats.absent} color="bg-red-500" iconName="XCircle" /><Stat title="التأخير اليوم" value={stats.late} color="bg-amber-500" iconName="Clock" /><Stat title="الهروب اليوم" value={stats.runaway} color="bg-orange-500" iconName="AlertCircle" /></div>
+                    
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-orange-100 mb-6 print:hidden">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
+                            <Icon name="AlertCircle" className="text-orange-500" size={20} /> 
+                            صفوف لم يتم رصد الغياب لها اليوم ({missingAttendanceGrades.length})
+                        </h3>
+                        {missingAttendanceGrades.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto print:max-h-none print:overflow-visible">
+                                {missingAttendanceGrades.map(g => (
+                                    <span key={g} className="bg-orange-50 text-orange-800 px-3 py-1 rounded-lg text-sm border border-orange-200 font-bold">
+                                        {g}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                                <Icon name="CheckCircle" size={18} />
+                                <span className="font-bold text-sm">ممتاز! تم رصد الغياب لجميع الصفوف اليوم.</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-emerald-100 mb-6 print:hidden">
+                        <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Megaphone" className="text-emerald-600" size={20} /> الإعلانات</h3>{!isEditingNews && <button onClick={() => setIsEditingNews(true)} className="text-sm text-emerald-600 flex items-center gap-1"><Icon name="Edit3" size={16} /> تعديل</button>}</div>
+                        {isEditingNews ? (<div className="flex flex-col gap-2"><textarea value={tempNews} onChange={(e) => setTempNews(e.target.value)} className="w-full p-2 border rounded" /><div className="flex gap-2 justify-end"><button onClick={() => setIsEditingNews(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={handleSaveNews} className="bg-emerald-600 text-white px-4 py-2 rounded">حفظ</button></div></div>) : (<div className="bg-slate-50 p-4 rounded-lg text-center">{newsText || "لا يوجد إعلان."}</div>)}
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-xl shadow-sm border h-full"><h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><Icon name="Award" className="text-yellow-500" size={24} /> المعلمين الأكثر نشاطاً</h3><div className="space-y-3">{topTeachers.map(([n, c], i) => (<div key={n} className="flex justify-between p-3 bg-slate-50 rounded border hover:bg-blue-50"><span className="font-bold">{i+1}. {n}</span><span className="text-xs bg-white px-2 py-1 rounded border">{c} عملية</span></div>))}</div></div>
+                        <div className="bg-white p-6 rounded-xl shadow-sm border h-full"><h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4"><Icon name="UserMinus" className="text-red-500" size={24} /> الطلاب الأكثر غياباً</h3><div className="space-y-3">{mostAbsentStudents.map((s, i) => (<div key={s.id} className="flex justify-between p-3 bg-red-50 rounded border hover:bg-red-100"><div className="font-bold">{i+1}. {s.name} <span className="text-xs font-normal">({s.grade})</span></div><span className="text-xs bg-white px-3 py-1 rounded border font-bold text-red-600">{s.count} أيام</span></div>))}</div></div>
+                    </div>
+                </div>
+            );
+        });
+
+        const StudentsView = memo(({ students, actions }) => {
+            const [newName, setNewName] = useState('');
+            const [newGrade, setNewGrade] = useState('');
+            const [filterGrade, setFilterGrade] = useState('');
+            const [showImport, setShowImport] = useState(false);
+            const [showDelAll, setShowDelAll] = useState(false);
+            const [showDelGrade, setShowDelGrade] = useState(false);
+            const [importText, setImportText] = useState('');
+            const [bulkGrade, setBulkGrade] = useState('');
+            const [gradeToDelete, setGradeToDelete] = useState('');
+            const [processing, setProcessing] = useState(false);
+            const nameInputRef = useRef(null);
+
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(sortGrades), [students]);
+            
+            const displayedStudents = useMemo(() => {
+                if (!filterGrade) return students;
+                return students.filter(s => s.grade === filterGrade);
+            }, [students, filterGrade]);
+
+            const add = async (e) => { e.preventDefault(); if(!newName.trim()) return; await actions.addStudent({ name: newName, grade: newGrade || 'غير محدد' }); setNewName(''); setNewGrade(''); };
+            const del = async (id) => { if(confirm('حذف؟')) await actions.deleteStudent(id); };
+            
+            const delAll = async () => { setProcessing(true); try { await actions.batchDelete(students); setShowDelAll(false); } catch(e) { console.error(e); } setProcessing(false); };
+            const delGrade = async () => { if(!gradeToDelete) return; setProcessing(true); try { await actions.batchDelete(students.filter(s => s.grade === gradeToDelete)); setShowDelGrade(false); setGradeToDelete(''); } catch(e) { console.error(e); } setProcessing(false); };
+            
+            const bulkImport = async () => {
+                if(!importText.trim()) return;
+                setProcessing(true);
+                try {
+                    const lines = importText.split('\n').filter(l => l.trim());
+                    const toAdd = lines.map(l => {
+                        const p = l.includes(',') ? l.split(',') : l.includes('\t') ? l.split('\t') : [l];
+                        return { name: p[0].trim(), grade: p[1]?.trim() || bulkGrade || 'غير محدد' };
+                    }).filter(s => s.name);
+                    await actions.batchAdd(toAdd);
+                    setImportText(''); setBulkGrade(''); setShowImport(false); alert(`تم إضافة ${toAdd.length} طالب`);
+                } catch(e) { console.error(e); alert('خطأ'); }
+                setProcessing(false);
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-slate-800">إدارة الطلاب</h2></div>
+                    {showImport && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden"><div className="bg-white rounded-xl w-full max-w-2xl p-6 flex flex-col gap-4 h-[80vh]"><h3 className="font-bold">استيراد</h3><input placeholder="صف موحد (اختياري)" onChange={(e)=>setBulkGrade(e.target.value)} className="p-2 border rounded"/><textarea placeholder="الأسماء..." value={importText} onChange={(e)=>setImportText(e.target.value)} className="flex-1 p-2 border rounded"/><div className="flex justify-end gap-2"><button onClick={()=>setShowImport(false)} className="bg-slate-200 px-4 py-2 rounded">إلغاء</button><button onClick={bulkImport} disabled={processing} className="bg-emerald-600 text-white px-4 py-2 rounded">بدء الحفظ</button></div></div></div>}
+                    {showDelAll && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><div className="text-red-600 font-bold mb-4">حذف الكل؟</div><button onClick={delAll} disabled={processing} className="bg-red-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'تأكيد'}</button><button onClick={()=>setShowDelAll(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
+                    {showDelGrade && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden"><div className="bg-white rounded-xl w-full max-w-md p-6 text-center"><h3 className="font-bold mb-4">حذف صف</h3><select onChange={(e)=>setGradeToDelete(e.target.value)} className="w-full p-2 border mb-4"><option value="">اختر</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><button onClick={delGrade} disabled={processing} className="bg-amber-600 text-white px-6 py-2 rounded-lg mx-2">{processing?'جاري...':'حذف'}</button><button onClick={()=>setShowDelGrade(false)} className="bg-slate-200 px-6 py-2 rounded-lg">إلغاء</button></div></div>}
+
+                    <div className="grid lg:grid-cols-3 gap-6 print:hidden">
+                        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border flex gap-4 items-end">
+                            <div className="flex-1"><label className="text-xs font-bold">الاسم</label><input ref={nameInputRef} value={newName} onChange={(e)=>setNewName(e.target.value)} className="w-full p-2 border rounded" placeholder="اسم الطالب"/></div>
+                            <div className="w-40 relative"><label className="text-xs font-bold">الصف</label><input list="grades" value={newGrade} onChange={(e)=>setNewGrade(e.target.value)} className="w-full p-2 border rounded pr-8" placeholder="اختر"/><datalist id="grades">{uniqueGrades.map(g=><option key={g} value={g}/>)}</datalist>{newGrade && <button onClick={()=>setNewGrade('')} className="absolute left-2 top-8 text-slate-400 hover:text-red-500 bg-white rounded-full p-0.5"><Icon name="X" size={14}/></button>}</div>
+                            <button onClick={add} className="bg-emerald-600 text-white px-6 py-2 rounded font-bold">إضافة</button>
+                        </div>
+                        <div className="bg-emerald-50 p-6 rounded-xl border flex justify-center items-center"><button onClick={()=>setShowImport(true)} className="bg-white text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg font-bold flex items-center gap-2"><Icon name="UploadCloud" size={18}/> استيراد</button></div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <div className="p-4 border-b bg-slate-50 flex flex-wrap gap-4 justify-between items-center print:hidden">
+                            <div className="flex items-center gap-2"><span className="font-bold">الطلاب ({displayedStudents.length})</span><select className="text-sm p-1 border rounded bg-white" value={filterGrade} onChange={e => setFilterGrade(e.target.value)}><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select></div>
+                            <div className="flex gap-2">{students.length>0 && <><button onClick={()=>setShowDelGrade(true)} className="text-xs bg-amber-50 text-amber-700 px-3 py-1 border border-amber-200 rounded">حذف صف</button><button onClick={()=>setShowDelAll(true)} className="text-xs bg-red-50 text-red-700 px-3 py-1 border border-red-200 rounded">حذف الكل</button></>}</div>
+                        </div>
+                        <div className="divide-y max-h-[60vh] overflow-y-auto print:max-h-none print:overflow-visible">{displayedStudents.map(s=>(<div key={s.id} className="p-4 flex justify-between hover:bg-slate-50"><div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">{s.grade}</div></div><button onClick={()=>del(s.id)} className="text-red-400 print:hidden"><Icon name="Trash2" size={18}/></button></div>))}</div>
+                    </div>
+                </div>
+            );
+        });
+
+        const ReportsView = memo(({ students, attendanceRecords, excellenceRecords }) => {
+            const [type, setType] = useState('attendance');
+            const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+            const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+            const [grade, setGrade] = useState('');
+            const [subject, setSubject] = useState('');
+            const [minSub, setMinSub] = useState(2);
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(sortGrades), [students]);
+            const subjects = ["التربية الإسلامية", "اللغة العربية", "الرياضيات", "العلوم", "اللغة الإنجليزية", "الدراسات الاجتماعية", "تقنية المعلومات", "الرياضة المدرسية", "الفنون التشكيلية", "الموسيقى", "المهارات الحياتية", "التاريخ", "الجغرافيا", "الفيزياء", "الكيمياء", "الأحياء"];
+
+            const attStatusLabel = { present: 'حاضر', late: 'متأخر', absent: 'غائب', runaway: 'هروب' };
+            const SessionDetailChips = ({ records }) => (
+                <div className="flex flex-wrap gap-1 justify-end">
+                    {(records || []).map((r, i) => (
+                        <span key={i} className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${r.status==='absent'?'bg-red-50 text-red-600 border-red-200':r.status==='late'?'bg-amber-50 text-amber-600 border-amber-200':'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                            {r.session === ADMIN_SESSION ? 'الإدارة' : r.session} ({r.teacherName || '—'}): {attStatusLabel[r.status] || r.status}
+                        </span>
+                    ))}
+                </div>
+            );
+
+            const dateFilter = (r) => r.date >= startDate && r.date <= endDate;
+
+            const dailyMap = useMemo(() => buildDailyAttendanceMap(attendanceRecords), [attendanceRecords]);
+
+            const dailyRowsInRange = useMemo(() => {
+                const rows = [];
+                Object.entries(dailyMap).forEach(([date, dayStudents]) => {
+                    if (date < startDate || date > endDate) return;
+                    Object.entries(dayStudents).forEach(([studentId, info]) => {
+                        rows.push({ date, studentId, status: info.status, recId: `${date}_${studentId}`, sessionRecords: info.sessionRecords });
+                    });
+                });
+                return rows;
+            }, [dailyMap, startDate, endDate]);
+
+            const abs = useMemo(() => dailyRowsInRange.filter(r => r.status === 'absent').map(r => {
+                const s = students.find(st => st.id === r.studentId);
+                return s ? { ...s, date: r.date, recId: r.recId, sessionRecords: r.sessionRecords } : null;
+            }).filter(Boolean).filter(s => grade ? s.grade === grade : true), [dailyRowsInRange, students, grade]);
+
+            const lat = useMemo(() => dailyRowsInRange.filter(r => r.status === 'late').map(r => {
+                const s = students.find(st => st.id === r.studentId);
+                return s ? { ...s, date: r.date, recId: r.recId, sessionRecords: r.sessionRecords } : null;
+            }).filter(Boolean).filter(s => grade ? s.grade === grade : true), [dailyRowsInRange, students, grade]);
+
+            const run = useMemo(() => dailyRowsInRange.filter(r => r.status === 'runaway').map(r => {
+                const s = students.find(st => st.id === r.studentId);
+                return s ? { ...s, date: r.date, recId: r.recId, sessionRecords: r.sessionRecords } : null;
+            }).filter(Boolean).filter(s => grade ? s.grade === grade : true), [dailyRowsInRange, students, grade]);
+            
+            const [quizFilter, setQuizFilter] = useState('');
+            const excRecs = useMemo(() => excellenceRecords.filter(dateFilter).filter(r => grade ? r.grade === grade : true).filter(r => subject ? r.subject === subject : true).filter(r => quizFilter ? r.quiz === quizFilter : true), [excellenceRecords, startDate, endDate, grade, subject, quizFilter]);
+            
+            const multiExc = useMemo(() => {
+                const counts = {}; 
+                excellenceRecords.filter(dateFilter).forEach(r => { 
+                    if (!counts[r.studentId]) counts[r.studentId] = new Set(); 
+                    counts[r.studentId].add(r.subject); 
+                });
+                return Object.keys(counts).map(id => { 
+                    const s = students.find(st => st.id === id); 
+                    return s && counts[id].size >= minSub ? { ...s, count: counts[id].size, subs: Array.from(counts[id]).join(', ') } : null; 
+                }).filter(Boolean).filter(s => grade ? s.grade === grade : true).sort((a,b) => b.count - a.count);
+            }, [excellenceRecords, students, minSub, grade, startDate, endDate]);
+
+            const teacherActivity = useMemo(() => {
+                const counts = {};
+                const process = (list) => list.filter(dateFilter).forEach(r => {
+                    if(r.teacherName) counts[r.teacherName] = (counts[r.teacherName] || 0) + 1;
+                });
+                process(attendanceRecords);
+                process(excellenceRecords);
+                return Object.entries(counts).sort(([,a], [,b]) => b - a).map(([name, count]) => ({ name, count }));
+            }, [attendanceRecords, excellenceRecords, startDate, endDate]);
+
+            const studentAbsenceCounts = useMemo(() => {
+                const counts = {};
+                Object.values(dailyMap).forEach(dayStudents => {
+                    Object.entries(dayStudents).forEach(([sid, info]) => {
+                        if (info.status === 'absent') counts[sid] = (counts[sid] || 0) + 1;
+                    });
+                });
+                return counts;
+            }, [dailyMap]);
+            
+            const exportCsv = () => {
+                let h, r, f;
+                if (type === 'attendance') { 
+                    h = ["Date","Name","Grade","Status", "Details (Session/Teacher)", "Total Absence"]; 
+                    const detailStr = (s) => (s.sessionRecords || []).map(rec => `${rec.session === ADMIN_SESSION ? 'Admin' : rec.session}(${rec.teacherName || '-'}):${rec.status}`).join(' | ');
+                    r = [
+                        ...abs.map(s=> {
+                            const count = studentAbsenceCounts[s.id] || 0;
+                            const warning = count > 5 ? " (Warning)" : "";
+                            return [s.date, s.name, s.grade, "Absent", detailStr(s), count + warning];
+                        }), 
+                        ...lat.map(s=>[s.date, s.name, s.grade, "Late", detailStr(s), "-"]),
+                        ...run.map(s=>[s.date, s.name, s.grade, "Runaway", detailStr(s), "-"])
+                    ];
+                    r.sort((a,b) => a[0].localeCompare(b[0]));
+                    f = `Att_${startDate}_${endDate}.csv`; 
+                }
+                else if (type === 'excellence') { h = ["Date","Name","Grade","Subject","Teacher","Quiz Period"]; r = excRecs.map(x=>[x.date,x.studentName,x.grade,x.subject,x.teacherName,x.quiz?QUIZ_LABEL[x.quiz]:'-']); f = `Exc_${startDate}_${endDate}.csv`; }
+                else if (type === 'multi_excellence') { h = ["Name","Grade","Count","Subjects"]; r = multiExc.map(s=>[s.name,s.grade,s.count,s.subs]); f = `Multi_${minSub}_${startDate}_${endDate}.csv`; }
+                else if (type === 'teacher_activity') { h = ["Name","Count"]; r = teacherActivity.map(t=>[t.name,t.count]); f = `Teachers_${startDate}_${endDate}.csv`; }
+                
+                if(!r.length) return alert("لا توجد بيانات لتصديرها");
+                const csv = "\uFEFF" + [h, ...r].map(e => e.join(",")).join("\n");
+                const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); 
+                a.href = url; 
+                a.download = f; 
+                document.body.appendChild(a); 
+                a.click(); 
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex flex-wrap gap-2 print:hidden">
+                        <button onClick={()=>setType('attendance')} className={`px-4 py-2 rounded font-bold ${type==='attendance'?'bg-emerald-600 text-white':'bg-white'}`}>غياب (فترة)</button>
+                        <button onClick={()=>setType('excellence')} className={`px-4 py-2 rounded font-bold ${type==='excellence'?'bg-purple-600 text-white':'bg-white'}`}>مجيدين</button>
+                        <button onClick={()=>setType('multi_excellence')} className={`px-4 py-2 rounded font-bold ${type==='multi_excellence'?'bg-amber-500 text-white':'bg-white'}`}>متفوقين</button>
+                        <button onClick={()=>setType('teacher_activity')} className={`px-4 py-2 rounded font-bold ${type==='teacher_activity'?'bg-blue-600 text-white':'bg-white'}`}>نشاط المعلمين</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 print:hidden items-center bg-slate-100 p-3 rounded-lg">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold">من:</span><input type="date" value={startDate} onChange={(e)=>setStartDate(e.target.value)} className="p-2 border rounded bg-white"/>
+                            <span className="text-sm font-bold">إلى:</span><input type="date" value={endDate} onChange={(e)=>setEndDate(e.target.value)} className="p-2 border rounded bg-white"/>
+                        </div>
+                        
+                        {type !== 'teacher_activity' && (
+                            <select value={grade} onChange={(e)=>setGrade(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل الصفوف</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select>
+                        )}
+                        
+                        {type==='excellence' && <select value={subject} onChange={(e)=>setSubject(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل المواد</option>{subjects.map(s=><option key={s} value={s}>{s}</option>)}</select>}
+                        {type==='excellence' && <select value={quizFilter} onChange={(e)=>setQuizFilter(e.target.value)} className="p-2 border rounded bg-white"><option value="">كل الفترات</option><option value="quiz1">الاختبار القصير الأول فقط</option><option value="quiz2">الاختبار القصير الثاني فقط</option></select>}
+                        
+                        {type==='multi_excellence' && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold">عدد المواد:</span>
+                                <select value={minSub} onChange={(e)=>setMinSub(Number(e.target.value))} className="p-2 border rounded bg-amber-50 font-bold">
+                                    <option value="1">مادة واحدة+</option>
+                                    <option value="2">مادتين+</option>
+                                    <option value="3">3+</option>
+                                    <option value="4">4+</option>
+                                    <option value="5">5+</option>
+                                </select>
+                            </div>
+                        )}
+                        
+                        <div className="flex-1"></div>
+                        <button onClick={exportCsv} className="bg-green-700 text-white px-4 py-2 rounded flex items-center gap-2"><Icon name="FileSpreadsheet" size={18}/> CSV</button>
+                        <button onClick={()=>{window.print()}} className="bg-slate-800 text-white px-4 py-2 rounded flex items-center gap-2"><Icon name="Printer" size={18}/> طباعة</button>
+                    </div>
+
+                    <div className="hidden print:block text-center text-xl font-bold mb-4 mt-8">
+                        تقرير {type === 'attendance' ? `الغياب للفترة من ${startDate} إلى ${endDate}` : `الفترة من ${startDate} إلى ${endDate}`}
+                    </div>
+
+                    {type==='attendance' && <div className="flex flex-col gap-8 print:block">
+                        <div className="bg-white rounded shadow border-red-200 print:shadow-none print:border-0 print:mb-8">
+                            <div className="p-4 border-b bg-red-50 font-bold text-red-800 flex justify-between print:bg-transparent print:border-b-2 print:border-black"><span>قائمة الغياب ({abs.length})</span></div>
+                            {/* إضافة print:overflow-visible هنا لإصلاح القص */}
+                            <div className="p-4 max-h-96 overflow-y-auto print:max-h-none print:overflow-visible print:p-0">
+                                {abs.length===0 ? <div className="p-4 text-center print:hidden">لا يوجد غياب</div> :
+                                <table className="w-full text-right text-sm">
+                                    <thead><tr className="border-b"><th>التاريخ</th><th>الاسم</th><th>الصف</th><th>الحالة</th><th>التفاصيل (الحصة والمعلم)</th><th>إجمالي الغياب</th></tr></thead>
+                                    <tbody>
+                                    {abs.map(s=> {
+                                        const count = studentAbsenceCounts[s.id] || 0;
+                                        const isWarning = count > 5;
+                                        return (
+                                        <tr key={s.recId} className="border-b last:border-0 print:border-gray-300">
+                                            <td className="py-2">{s.date}</td>
+                                            <td className="font-bold">{s.name}</td>
+                                            <td>{s.grade}</td>
+                                            <td className="text-red-600 print:text-black">غائب</td>
+                                            <td><SessionDetailChips records={s.sessionRecords} /></td>
+                                            <td className={`font-bold ${isWarning ? 'text-red-600 print:text-black' : 'text-slate-700 print:text-black'}`}>
+                                                {count} {isWarning && <span className="mr-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-200 print:bg-transparent print:border-black">إنذار</span>}
+                                            </td>
+                                        </tr>
+                                    )})}
+                                    </tbody>
+                                </table>}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded shadow border-amber-200 print:shadow-none print:border-0 print:mb-8 page-break">
+                            <div className="p-4 border-b bg-amber-50 font-bold text-amber-800 flex justify-between print:bg-transparent print:border-b-2 print:border-black"><span>قائمة التأخير ({lat.length})</span></div>
+                            {/* إضافة print:overflow-visible هنا لإصلاح القص */}
+                            <div className="p-4 max-h-96 overflow-y-auto print:max-h-none print:overflow-visible print:p-0">
+                                {lat.length===0 ? <div className="p-4 text-center print:hidden">لا يوجد تأخير</div> :
+                                <table className="w-full text-right text-sm">
+                                    <thead><tr className="border-b"><th>التاريخ</th><th>الاسم</th><th>الصف</th><th>الحالة</th><th>التفاصيل (الحصة والمعلم)</th></tr></thead>
+                                    <tbody>
+                                    {lat.map(s=>(
+                                        <tr key={s.recId} className="border-b last:border-0 print:border-gray-300">
+                                            <td className="py-2">{s.date}</td>
+                                            <td className="font-bold">{s.name}</td>
+                                            <td>{s.grade}</td>
+                                            <td className="text-amber-600 print:text-black">تأخير</td>
+                                            <td><SessionDetailChips records={s.sessionRecords} /></td>
+                                        </tr>
+                                    ))}
+                                    </tbody>
+                                </table>}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded shadow border-orange-200 print:shadow-none print:border-0 print:mb-8 page-break">
+                            <div className="p-4 border-b bg-orange-50 font-bold text-orange-800 flex justify-between print:bg-transparent print:border-b-2 print:border-black"><span>قائمة الهروب ({run.length})</span></div>
+                            {/* إضافة print:overflow-visible هنا لإصلاح القص */}
+                            <div className="p-4 max-h-96 overflow-y-auto print:max-h-none print:overflow-visible print:p-0">
+                                {run.length===0 ? <div className="p-4 text-center print:hidden">لا يوجد هروب</div> :
+                                <table className="w-full text-right text-sm">
+                                    <thead><tr className="border-b"><th>التاريخ</th><th>الاسم</th><th>الصف</th><th>الحالة</th><th>التفاصيل (الحصة والمعلم)</th></tr></thead>
+                                    <tbody>
+                                    {run.map(s=>(
+                                        <tr key={s.recId} className="border-b last:border-0 print:border-gray-300">
+                                            <td className="py-2">{s.date}</td>
+                                            <td className="font-bold">{s.name}</td>
+                                            <td>{s.grade}</td>
+                                            <td className="text-orange-600 print:text-black">🏃 هروب</td>
+                                            <td><SessionDetailChips records={s.sessionRecords} /></td>
+                                        </tr>
+                                    ))}
+                                    </tbody>
+                                </table>}
+                            </div>
+                        </div>
+                    </div>}
+                    
+                    {type==='excellence' && <div className="bg-white rounded shadow border-purple-200 print:shadow-none print:border-0">
+                        <div className="p-4 border-b bg-purple-50 font-bold text-purple-800 print:bg-transparent print:border-b-2 print:border-black">المجيدين ({excRecs.length})</div>
+                        <div className="p-4 overflow-x-auto print:overflow-visible print:p-0">
+                            <table className="w-full text-right text-sm">
+                                <thead><tr className="border-b"><th>التاريخ</th><th>الاسم</th><th>الصف</th><th>المادة</th><th>المعلم</th><th>الاختبار القصير</th></tr></thead>
+                                <tbody>{excRecs.map((r,i)=><tr key={i} className="border-b last:border-0 py-2 print:border-gray-300"><td>{r.date}</td><td>{r.studentName}</td><td>{r.grade}</td><td>{r.subject}</td><td>{r.teacherName}</td><td>{r.quiz ? <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200 font-bold print:border-0 print:bg-transparent">{QUIZ_LABEL[r.quiz]}</span> : '—'}</td></tr>)}</tbody>
+                            </table>
+                        </div>
+                    </div>}
+
+                    {type==='multi_excellence' && <div className="bg-white rounded shadow border-amber-200 print:shadow-none print:border-0">
+                        <div className="p-4 border-b bg-amber-50 font-bold text-amber-800 print:bg-transparent print:border-b-2 print:border-black">المتفوقين في {minSub} مواد فأكثر ({multiExc.length})</div>
+                        <div className="p-4 overflow-x-auto print:overflow-visible print:p-0">
+                            <table className="w-full text-right text-sm">
+                                <thead><tr className="border-b"><th>الاسم</th><th>الصف</th><th>عدد المواد</th><th>المواد</th></tr></thead>
+                                <tbody>{multiExc.map((r,i)=><tr key={i} className="border-b last:border-0 py-2 print:border-gray-300"><td>{r.name}</td><td>{r.grade}</td><td className="font-bold text-center">{r.count}</td><td className="text-xs text-slate-500 print:text-black">{r.subs}</td></tr>)}</tbody>
+                            </table>
+                        </div>
+                    </div>}
+
+                    {type==='teacher_activity' && <div className="bg-white rounded shadow border-blue-200 print:shadow-none print:border-0">
+                        <div className="p-4 border-b bg-blue-50 font-bold text-blue-800 print:bg-transparent print:border-b-2 print:border-black">نشاط المعلمين ({teacherActivity.length})</div>
+                        <div className="p-4 overflow-x-auto print:overflow-visible print:p-0">
+                            <table className="w-full text-right text-sm">
+                                <thead><tr className="border-b"><th>الترتيب</th><th>اسم المعلم</th><th>عدد العمليات (رصد/مجيدين)</th></tr></thead>
+                                <tbody>{teacherActivity.map((t,i)=><tr key={i} className="border-b last:border-0 py-2 print:border-gray-300"><td className="font-bold text-blue-600 print:text-black">#{i+1}</td><td>{t.name}</td><td className="font-bold">{t.count}</td></tr>)}</tbody>
+                            </table>
+                        </div>
+                    </div>}
+                </div>
+            );
+        });
+        
+        // ... بقية المكونات مثل AttendanceView و ExcellenceView تبقى دون تغيير كبير وتعمل بكفاءة ...
+        const AttendanceView = memo(({ students, attendanceRecords, userRole, teacherState, setTeacherState, actions }) => {
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [search, setSearch] = useState('');
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(sortGrades), [students]);
+
+            const dailyMap = useMemo(() => buildDailyAttendanceMap(attendanceRecords), [attendanceRecords]);
+            const dayData = dailyMap[date] || {};
+            const localAttendance = useMemo(() => {
+                const m = {};
+                Object.entries(dayData).forEach(([sid, info]) => { m[sid] = info.status; });
+                return m;
+            }, [dayData]);
+
+            const isComplete = Boolean(teacherState.name?.trim() && teacherState.grade && teacherState.session);
+            const canMark = userRole === 'admin' || isComplete;
+            const currentSession = userRole === 'admin' ? ADMIN_SESSION : teacherState.session;
+
+            const filtered = useMemo(() => { if (userRole === 'teacher' && !teacherState.grade) return []; return students.filter(s => s.name.includes(search) && (teacherState.grade ? s.grade === teacherState.grade : true)); }, [students, search, teacherState.grade, userRole]);
+
+            const gradeSessionsRecorded = useMemo(() => {
+                if (!teacherState.grade) return [];
+                const bySession = {};
+                attendanceRecords.forEach(r => {
+                    if (r.date === date && r.grade === teacherState.grade && r.session && r.session !== ADMIN_SESSION && !bySession[r.session]) {
+                        bySession[r.session] = r.teacherName;
+                    }
+                });
+                return SESSIONS.filter(s => bySession[s]).map(s => ({ session: s, teacherName: bySession[s] }));
+            }, [date, teacherState.grade, attendanceRecords]);
+
+            const update = async (student, status) => {
+                if (!canMark) { alert("الرجاء تعبئة اسم المعلم والحصة والصف أولاً لتفعيل الرصد"); return; }
+                try {
+                    await actions.updateAttendance(`${date}_${student.id}_${currentSession}`, { date, studentId: student.id, status, teacherName: teacherState.name || 'الإدارة', grade: student.grade, session: currentSession });
+                } catch (e) {
+                    console.error('Attendance update failed', e);
+                }
+            };
+            const batch = async (status) => {
+                if (!canMark || !filtered.length) return;
+                const items = filtered.map(s => ({ id: `${date}_${s.id}_${currentSession}`, data: { date, studentId: s.id, status, teacherName: teacherState.name || 'الإدارة', grade: s.grade, session: currentSession } }));
+                try {
+                    await actions.batchAttendance(items);
+                } catch (e) {
+                    console.error('Batch attendance failed', e);
+                }
+            };
+            const copy = () => { if (!isComplete) return alert("أكمل البيانات"); const ids = new Set(filtered.map(s => s.id)); const abs = students.filter(s => ids.has(s.id) && localAttendance[s.id] === 'absent'); const lat = students.filter(s => ids.has(s.id) && localAttendance[s.id] === 'late'); const run = students.filter(s => ids.has(s.id) && localAttendance[s.id] === 'runaway'); const t = `*مدرسة بلال بن رباح*\nالتاريخ: ${date}\nالمعلم: ${teacherState.name}\nالصف: ${teacherState.grade}\nالحصة: ${teacherState.session}\n\n🛑 *غياب (${abs.length}):*\n${abs.map(s => s.name).join('\n') || 'لا يوجد'}\n\n⚠️ *تأخير (${lat.length}):*\n${lat.map(s => s.name).join('\n') || 'لا يوجد'}\n\n🏃 *هروب (${run.length}):*\n${run.map(s => s.name).join('\n') || 'لا يوجد'}`; const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); alert("تم النسخ"); };
+
+            const statusLabel = { present: 'حاضر', late: 'متأخر', absent: 'غائب', runaway: 'هروب' };
+
+            return (
+                <div className="space-y-6">
+                    {userRole === 'teacher' && <div className="bg-white p-4 rounded shadow border border-emerald-100 grid grid-cols-2 gap-4"><div><label className="text-xs font-bold">المعلم *</label><input value={teacherState.name} onChange={(e)=>setTeacherState(p=>({...p,name:e.target.value}))} className="w-full p-2 border rounded"/></div><div><label className="text-xs font-bold">الحصة *</label><select value={teacherState.session} onChange={(e)=>setTeacherState(p=>({...p,session:e.target.value}))} className="w-full p-2 border rounded"><option value="">اختر</option>{SESSIONS.map(s=><option key={s} value={s}>{s}</option>)}</select></div></div>}
+                    <div className="flex justify-between gap-2 items-center"><h2 className="text-xl font-bold">رصد الغياب</h2><div className="flex gap-2"><input type="date" value={date} onChange={(e)=>setDate(e.target.value)} className="p-2 border rounded"/>{userRole==='teacher'&&<button onClick={copy} disabled={!isComplete} className={`px-4 py-2 rounded text-white font-bold ${!isComplete?'bg-slate-400':'bg-emerald-600'}`}>نسخ</button>}</div></div>
+
+                    {teacherState.grade && (
+                        <div className="bg-blue-50 border-r-4 border-blue-400 p-4 rounded shadow-sm flex items-start gap-3 mb-4">
+                            <Icon name="ClipboardList" className="text-blue-500 mt-1" />
+                            <div className="flex-1">
+                                <p className="font-bold text-blue-800">الحصص المرصودة اليوم لهذا الصف ({gradeSessionsRecorded.length} من {SESSIONS.length})</p>
+                                {gradeSessionsRecorded.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {gradeSessionsRecorded.map(g => (
+                                            <span key={g.session} className={`text-xs px-2 py-1 rounded-full border font-bold ${g.session === teacherState.session ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-blue-700 border-blue-200'}`}>
+                                                {g.session}: {g.teacherName}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : <p className="text-sm text-blue-700 mt-1">لم يتم رصد أي حصة بعد لهذا الصف اليوم.</p>}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-white p-4 rounded shadow border flex gap-4 items-center sticky top-0 z-10"><select value={teacherState.grade} onChange={(e)=>setTeacherState(p=>({...p,grade:e.target.value}))} className="p-2 border rounded w-1/4"><option value="">{userRole==='teacher'?'اختر الصف *':'الكل'}</option>{uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}</select><input placeholder="بحث..." value={search} onChange={(e)=>setSearch(e.target.value)} className="p-2 border rounded flex-1"/><div className="flex gap-2"><button onClick={()=>batch('present')} disabled={!canMark} className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded cursor-pointer hover:bg-emerald-200">تحضير</button><button onClick={()=>batch('absent')} disabled={!canMark} className="px-3 py-1 bg-red-100 text-red-700 rounded cursor-pointer hover:bg-red-200">تغييب</button></div></div>
+                    <div className="bg-white rounded shadow border overflow-hidden">
+                        <div className="divide-y">
+                            {filtered.length===0 ? <div className="p-8 text-center text-slate-400">لا يوجد طلاب</div> : filtered.map(s => {
+                                const info = dayData[s.id];
+                                const finalStatus = info?.status;
+                                const returned = finalStatus === 'late' && info?.sessionRecords?.some(r => r.status === 'absent');
+                                return (
+                                    <div key={s.id} className={`p-4 flex justify-between items-center gap-3 ${finalStatus==='absent'?'bg-red-50':finalStatus==='runaway'?'bg-orange-50':finalStatus==='late'?'bg-amber-50':''}`}>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-bold flex items-center gap-2 flex-wrap">
+                                                {s.name}
+                                                {finalStatus==='absent' && <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full border border-red-200 font-bold">غياب يوم كامل</span>}
+                                                {finalStatus==='runaway' && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full border border-orange-200 font-bold">🏃 هروب</span>}
+                                                {returned && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 font-bold">متأخر - عاد خلال اليوم</span>}
+                                            </div>
+                                            <div className="text-xs text-slate-500">{s.grade}</div>
+                                            {info?.sessionRecords?.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {info.sessionRecords.map(r => (
+                                                        <span key={r.session} className={`text-[10px] px-1.5 py-0.5 rounded border ${r.status==='absent'?'bg-red-50 text-red-600 border-red-200':r.status==='late'?'bg-amber-50 text-amber-600 border-amber-200':'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                                                            {r.session === ADMIN_SESSION ? 'الإدارة' : r.session}: {statusLabel[r.status]}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-1 flex-shrink-0">{['present','late','absent'].map(st=>(<button key={st} onClick={()=>update(s,st)} disabled={!canMark} className={`p-2 rounded border cursor-pointer transition-colors ${(finalStatus===st||(finalStatus==='runaway'&&st==='absent'))?(st==='present'?'bg-emerald-600 text-white':st==='late'?'bg-amber-500 text-white':finalStatus==='runaway'?'bg-orange-500 text-white':'bg-red-500 text-white'):'bg-white text-slate-500 hover:bg-slate-100'}`}><Icon name={st==='present'?'CheckCircle':st==='late'?'Clock':'XCircle'} size={18}/></button>))}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        const isQuizWindowOpen = (win) => {
+            return win && win.isOpen === true;
+        };
+        
+        const getActiveQuizTag = (quizWindows) => {
+            if (isQuizWindowOpen(quizWindows?.quiz1)) return 'quiz1';
+            if (isQuizWindowOpen(quizWindows?.quiz2)) return 'quiz2';
+            return null;
+        };
+        const QUIZ_LABEL = { quiz1: 'الاختبار القصير الأول', quiz2: 'الاختبار القصير الثاني' };
+
+        const ExcellenceView = memo(({ students, userRole, teacherState, setTeacherState, excellenceRecords, actions, isExcellenceLocked, quizWindows }) => {
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [search, setSearch] = useState('');
+            const subjects = ["التربية الإسلامية", "اللغة العربية", "الرياضيات", "العلوم", "اللغة الإنجليزية", "الدراسات الاجتماعية", "تقنية المعلومات", "الرياضة المدرسية", "الفنون التشكيلية", "الموسيقى", "المهارات الحياتية", "التاريخ", "الجغرافيا", "الفيزياء", "الكيمياء", "الأحياء"];
+            const uniqueGrades = useMemo(() => [...new Set(students.map(s => s.grade || 'غير محدد'))].sort(sortGrades), [students]);
+            
+            const excellenceData = useMemo(() => { 
+                const d={}; 
+                excellenceRecords.forEach(r => {
+                    d[`${r.date}_${r.subject}_${r.studentId}`] = true;
+                    if (r.id) d[r.id] = true;
+                }); 
+                return d; 
+            }, [excellenceRecords]);
+
+            const filtered = useMemo(() => { 
+                if (!teacherState.grade) return []; 
+                return students.filter(s => s.name.includes(search) && s.grade === teacherState.grade); 
+            }, [students, search, teacherState.grade]);
+
+            const isAdmin = userRole === 'admin';
+            const activeQuiz = getActiveQuizTag(quizWindows);
+            const isQuizActive = Boolean(quizWindows?.quiz1?.isOpen || quizWindows?.quiz2?.isOpen);
+            
+            // Can mark if admin OR general excellence is unlocked OR any quiz window is open
+            const canMark = isAdmin || (!isExcellenceLocked) || isQuizActive;
+
+            const toggle = async (sid) => {
+                if (!canMark) {
+                    alert("رصد المجيدين مقفل حالياً من قبل الإدارة");
+                    return;
+                }
+                const teacherName = (teacherState.name || '').trim();
+                if (!teacherName || !teacherState.grade || !teacherState.subject) {
+                    alert("الرجاء تحديد (اسم المعلم والصف والمادة) أولاً لتفعيل رصد النجمة");
+                    return;
+                }
+                const key = `${date}_${teacherState.subject}_${sid}`;
+                const exists = !!excellenceData[key];
+                const student = students.find(s => s.id === sid);
+                
+                try {
+                    await actions.toggleExcellence(key, { 
+                        date, 
+                        studentId: sid, 
+                        studentName: student ? student.name : '', 
+                        grade: teacherState.grade, 
+                        subject: teacherState.subject, 
+                        teacherName: teacherName, 
+                        quiz: exists ? null : activeQuiz 
+                    }, exists);
+                } catch(e) {
+                    console.error("Error in toggleExcellence:", e);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    {isAdmin && (
+                        <div className="bg-white p-5 rounded-xl shadow-sm border space-y-4 print:hidden">
+                            <div className="flex justify-between items-center border-b pb-3 flex-wrap gap-2">
+                                <div>
+                                    <h3 className="font-bold text-slate-800 text-base">لوحة صلاحيات رصد المجيدين للمعلمين</h3>
+                                    <p className="text-xs text-slate-500">تحكم بالرصد العام أو رصد فترات الاختبارات القصيرة</p>
+                                </div>
+                                <button 
+                                    onClick={actions.toggleExcellenceLock} 
+                                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow-sm ${!isExcellenceLocked ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700'}`}>
+                                    <Icon name={!isExcellenceLocked ? "UnlockKeyhole" : "LockKeyhole"} size={18} />
+                                    {!isExcellenceLocked ? 'الرصد العام متاح (اضغط للقفل)' : 'الرصد العام مقفل (اضغط للفتح)'}
+                                </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {['quiz1','quiz2'].map(q => {
+                                    const w = quizWindows?.[q] || {};
+                                    const open = isQuizWindowOpen(w);
+                                    return (
+                                        <div key={q} className={`p-4 rounded-xl border flex items-center justify-between transition-colors ${open ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2.5 rounded-full ${open ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}>
+                                                    <Icon name={open ? "UnlockKeyhole" : "LockKeyhole"} size={20} />
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-slate-800">{QUIZ_LABEL[q]}</div>
+                                                    <div className={`text-xs mt-0.5 ${open ? 'text-emerald-700 font-bold' : 'text-slate-500'}`}>{open ? 'مفتوح للرصد الآن' : 'مغلق'}</div>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => actions.toggleQuizStatus(q)} className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-sm ${open ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                                                {open ? 'إغلاق الرصد' : 'فتح الرصد'}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {!isAdmin && (
+                        canMark ? (
+                            <div className="p-3.5 rounded-xl border bg-emerald-50 border-emerald-200 flex items-center gap-2 text-emerald-800 print:hidden">
+                                <Icon name="UnlockKeyhole" size={20} className="text-emerald-600 flex-shrink-0" />
+                                <p className="font-bold text-sm">
+                                    صلاحية رصد المجيدين متاحة حالياً {activeQuiz ? `(فترة ${QUIZ_LABEL[activeQuiz]})` : '(الرصد العام)'}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="p-3.5 rounded-xl border bg-red-50 border-red-200 flex items-center gap-2 text-red-800 print:hidden">
+                                <Icon name="LockKeyhole" size={20} className="text-red-600 flex-shrink-0" />
+                                <p className="font-bold text-sm">
+                                    رصد المجيدين مقفل حالياً من قبل الإدارة. يرجى مراجعة إدارة المدرسة لفتح الصلاحية.
+                                </p>
+                            </div>
+                        )
+                    )}
+
+                    <div className="bg-white p-4 rounded-xl shadow-sm border grid grid-cols-1 md:grid-cols-3 gap-4 print:hidden">
+                        <div>
+                            <label className="text-xs font-bold text-slate-700 mb-1 block">اسم المعلم *</label>
+                            <input 
+                                value={teacherState.name} 
+                                onChange={(e)=>setTeacherState(p=>({...p,name:e.target.value}))} 
+                                className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                                placeholder="اكتب اسمك هنا"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-700 mb-1 block">المادة *</label>
+                            <select 
+                                value={teacherState.subject} 
+                                onChange={(e)=>setTeacherState(p=>({...p,subject:e.target.value}))} 
+                                className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                                <option value="">اختر المادة</option>
+                                {subjects.map(s=><option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-700 mb-1 block">التاريخ</label>
+                            <input 
+                                type="date" 
+                                value={date} 
+                                onChange={(e)=>setDate(e.target.value)} 
+                                className="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-4 rounded-xl shadow-sm border flex gap-4 items-center sticky top-0 z-10 print:hidden">
+                        <select 
+                            value={teacherState.grade} 
+                            onChange={(e)=>setTeacherState(p=>({...p,grade:e.target.value}))} 
+                            className="p-2.5 border border-slate-300 rounded-lg w-1/3 bg-white outline-none focus:ring-2 focus:ring-emerald-500 font-bold">
+                            <option value="">{userRole==='teacher'?'اختر الصف *':'كل الصفوف'}</option>
+                            {uniqueGrades.map(g=><option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <div className="relative flex-1">
+                            <input 
+                                placeholder="بحث عن اسم الطالب..." 
+                                value={search} 
+                                onChange={(e)=>setSearch(e.target.value)} 
+                                className="w-full p-2.5 pr-9 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                            <div className="absolute right-3 top-3 text-slate-400"><Icon name="Search" size={18}/></div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                        <div className="divide-y">
+                            {!teacherState.grade || !teacherState.subject ? (
+                                <div className="p-10 text-center text-slate-400 font-bold flex flex-col items-center gap-2 print:hidden">
+                                    <Icon name="Star" size={36} className="text-slate-300" />
+                                    <span>الرجاء اختيار (الصف والمادة) من الأعلى لبدء رصد المجيدين</span>
+                                </div>
+                            ) : filtered.length === 0 ? (
+                                <div className="p-8 text-center text-slate-400 print:hidden">لا يوجد طلاب مطابقين للبحث</div>
+                            ) : (
+                                filtered.map(s => {
+                                    const isExcellence = !!excellenceData[`${date}_${teacherState.subject}_${s.id}`];
+                                    return (
+                                        <div key={s.id} className={`p-4 flex justify-between items-center transition-colors ${isExcellence ? 'bg-amber-50/70' : 'hover:bg-slate-50'}`}>
+                                            <div>
+                                                <div className="font-bold text-slate-800 text-base">{s.name}</div>
+                                                <div className="text-xs text-slate-400">{s.grade}</div>
+                                            </div>
+                                            <button 
+                                                onClick={() => toggle(s.id)} 
+                                                disabled={!canMark} 
+                                                title={!canMark ? "الرصد مقفل" : isExcellence ? "إلغاء الإجادة" : "رصد إجادة"}
+                                                className={`p-2.5 rounded-full transition-transform active:scale-95 ${!canMark ? 'opacity-30 cursor-not-allowed text-slate-400' : 'cursor-pointer'} ${isExcellence ? 'text-amber-500 hover:scale-110' : 'text-slate-300 hover:text-amber-400'} print:hidden`}>
+                                                <Icon name="Star" size={28} fill={isExcellence ? "currentColor" : "none"} />
+                                            </button>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
+
+        // --- Main App ---
+        const SchoolAttendanceApp = () => {
+            const [firebaseReady, setFirebaseReady] = useState(false);
+            const [user, setUser] = useState(null);
+            const [userRole, setUserRole] = useState(null);
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [students, setStudents] = useState([]);
+            const [teachers, setTeachers] = useState([]);
+            const [attendanceRecords, setAttendanceRecords] = useState([]);
+            const [excellenceRecords, setExcellenceRecords] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [newsText, setNewsText] = useState('');
+            const [teacherState, setTeacherState] = useState({ name: '', grade: '', session: '', subject: '' });
+            const [authError, setAuthError] = useState(null);
+            const [isOffline, setIsOffline] = useState(false);
+            const [dbError, setDbError] = useState(null);
+            const [saveStatus, setSaveStatus] = useState('');
+            const [isExcellenceLocked, setIsExcellenceLocked] = useState(false);
+            const [quizWindows, setQuizWindows] = useState({ quiz1: { isOpen: false }, quiz2: { isOpen: false } });
+            
+            useEffect(() => {
+                if (window.AppFirebase) setFirebaseReady(true);
+                else window.addEventListener('firebase-ready', () => setFirebaseReady(true));
+            }, []);
+
+            useEffect(() => {
+                if (!firebaseReady) return;
+                const { auth, signInAnonymously } = window.AppFirebase;
+                const timer = setTimeout(() => { if(loading) setLoading(false); }, 4000);
+                
+                if (auth && signInAnonymously) {
+                    signInAnonymously(auth).catch(err => {
+                        console.error(err);
+                        if(err.code === 'auth/configuration-not-found' || err.code === 'auth/operation-not-allowed' || err.code === 'auth/internal-error') {
+                            setAuthError("تنبيه: خدمة الدخول غير مفعلة. الوضع المحلي."); 
+                            setIsOffline(true); 
+                            setUser({uid:'offline', isAnonymous:true});
+                        }
+                    });
+                }
+                return () => clearTimeout(timer);
+            }, [firebaseReady]);
+            
+            useEffect(() => {
+                 if (!firebaseReady) return;
+                 const { auth, onAuthStateChanged } = window.AppFirebase;
+                 if (auth && onAuthStateChanged) {
+                    return onAuthStateChanged(auth, (u) => { if(!isOffline) setUser(u); });
+                 }
+            }, [firebaseReady, isOffline]);
+
+            useEffect(() => {
+                if (!user) return;
+                if (isOffline) {
+                    setStudents(JSON.parse(localStorage.getItem('students')||'[]'));
+                    setTeachers(JSON.parse(localStorage.getItem('teachers')||'[]'));
+                    setAttendanceRecords(JSON.parse(localStorage.getItem('attendance')||'[]'));
+                    setExcellenceRecords(JSON.parse(localStorage.getItem('excellence')||'[]'));
+                    setQuizWindows(JSON.parse(localStorage.getItem('quizWindows')||'{"quiz1":{"isOpen":false},"quiz2":{"isOpen":false}}'));
+                    setNewsText(localStorage.getItem('newsText')||'');
+                    setIsExcellenceLocked(JSON.parse(localStorage.getItem('excellenceLocked')||'false'));
+                    setLoading(false); return;
+                }
+                const { db, collection, onSnapshot, doc } = window.AppFirebase;
+                const u1 = onSnapshot(collection(db,'artifacts',appId,'public','data','students'), 
+                    s => setStudents(s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.name.localeCompare(b.name,'ar'))),
+                    err => { 
+                        console.log("Students Sync Error", err); 
+                        if(err.code === 'permission-denied') setDbError("خطأ في الصلاحيات (Permission Denied)"); 
+                        if(err.code === 'resource-exhausted') { setDbError("تم استهلاك باقة Firebase المجانية (Quota Exceeded). يعمل النظام الآن محلياً."); setIsOffline(true); }
+                    }
+                );
+                const onSyncError = (label) => (err) => {
+                    console.error(`${label} Sync Error`, err);
+                    if (err.code === 'permission-denied') setDbError(`خطأ في الصلاحيات على (${label})`);
+                    if (err.code === 'resource-exhausted') { setDbError("تم استهلاك باقة Firebase المجانية (Quota Exceeded). يعمل النظام الآن محلياً."); setIsOffline(true); }
+                };
+                const u2 = onSnapshot(collection(db,'artifacts',appId,'public','data','attendance'), s => setAttendanceRecords(s.docs.map(d=>({id:d.id,...d.data()}))), onSyncError('الغياب'));
+                const u3 = onSnapshot(collection(db,'artifacts',appId,'public','data','excellence'), s => { setExcellenceRecords(s.docs.map(d=>({id:d.id,...d.data()}))); setLoading(false); }, onSyncError('الإجادة'));
+                const u4 = onSnapshot(doc(db,'artifacts',appId,'public','data','settings','config'), s => {
+                    if (s.exists()) {
+                        const data = s.data();
+                        setNewsText(data.newsText || '');
+                        setIsExcellenceLocked(!!data.excellenceLocked);
+                        setQuizWindows(data.quizWindows || { quiz1: { isOpen: false }, quiz2: { isOpen: false } });
+                    }
+                }, onSyncError('الإعدادات'));
+                const u5 = onSnapshot(collection(db,'artifacts',appId,'public','data','teachers'), s => setTeachers(s.docs.map(d=>({id:d.id,...d.data()}))), onSyncError('المعلمين'));
+                
+                return () => { u1(); u2(); u3(); u4(); u5(); };
+            }, [user, isOffline]);
+
+            const handleLogin = (role, password = "") => {
+                if (role === 'admin') {
+                    if (password === 'akm1983') { setUserRole('admin'); setActiveTab('dashboard'); } 
+                    else { alert('كلمة المرور خاطئة'); }
+                } else { setUserRole('teacher'); setActiveTab('attendance'); }
+            };
+
+            const handleTeacherLogin = (fileNumber) => {
+                const teacher = teachers.find(t => t.id.toString().trim() === fileNumber.toString().trim());
+                if (teacher) {
+                    setUserRole('teacher');
+                    setActiveTab('attendance');
+                    const teacherDisplayName = (teacher.name && teacher.name !== 'معلم') ? teacher.name : '';
+                    setTeacherState(prev => ({ ...prev, name: teacherDisplayName }));
+                } else {
+                    alert('رقم الملف غير مسجل في النظام');
+                }
+            };
+
+            const handleLogout = () => {
+                setUserRole(null);
+                setActiveTab('dashboard');
+                setTeacherState({ name: '', grade: '', session: '', subject: '' });
+            };
+
+            const withSaveStatus = async (promise) => {
+                setSaveStatus('saving');
+                try {
+                    await promise;
+                    setSaveStatus('success');
+                    setTimeout(() => setSaveStatus(''), 2000);
+                } catch (e) {
+                    setSaveStatus('error');
+                    console.error(e);
+                    if (e.code === 'resource-exhausted') {
+                        alert("تم استنفاد باقة Firebase المجانية! تم تحويل النظام للوضع المحلي.");
+                        setIsOffline(true);
+                    } else {
+                        alert("فشل الحفظ: تأكد من الاتصال بالإنترنت وقواعد الأمان");
+                    }
+                    setTimeout(() => setSaveStatus(''), 3000);
+                    throw e;
+                }
+            };
+
+            const actions = {
+                addStudent: async (d) => {
+                    const s = {id:Date.now().toString(), ...d};
+                    if(isOffline){ const n=[...students,s]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const {db,collection,doc,setDoc,serverTimestamp} = window.AppFirebase; await withSaveStatus(setDoc(doc(collection(db,'artifacts',appId,'public','data','students')), {...d, createdAt: serverTimestamp()}));
+                },
+                batchAdd: async (list) => {
+                    if(isOffline) { const n=[...students, ...list.map(i=>({id:Math.random().toString(),...i}))]; setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const {db,collection,doc,writeBatch,serverTimestamp} = window.AppFirebase;
+                    const batch = writeBatch(db);
+                    list.forEach(i => batch.set(doc(collection(db,'artifacts',appId,'public','data','students')), {...i, createdAt: serverTimestamp()}));
+                    await withSaveStatus(batch.commit());
+                },
+                deleteStudent: async (id) => {
+                    const n = students.filter(s=>s.id!==id);
+                    if(isOffline){ setStudents(n); localStorage.setItem('students',JSON.stringify(n)); return; }
+                    const {db,doc,deleteDoc} = window.AppFirebase; await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','students',id)));
+                },
+                batchDelete: async (list) => {
+                    if(isOffline) { 
+                        setStudents(prev => prev.filter(s => !list.find(d => d.id === s.id)));
+                        localStorage.setItem('students',JSON.stringify(students.filter(s => !list.find(d => d.id === s.id)))); 
+                        return; 
+                    }
+                    const {db,doc,writeBatch} = window.AppFirebase;
+                    const batchSize = 400; 
+                    const chunks = [];
+                    for(let i=0;i<list.length;i+=batchSize) chunks.push(list.slice(i,i+batchSize));
+                    
+                    for(const chunk of chunks) {
+                        const batch = writeBatch(db);
+                        chunk.forEach(s => batch.delete(doc(db,'artifacts',appId,'public','data','students',s.id)));
+                        await batch.commit();
+                    }
+                },
+                deleteAllAttendance: async () => {
+                    if (!confirm("هل أنت متأكد من مسح جميع سجلات الغياب؟ لا يمكن التراجع عن هذا الإجراء.")) return;
+                    
+                    if (isOffline) {
+                        setAttendanceRecords([]);
+                        localStorage.setItem('attendance', '[]');
+                        return;
+                    }
+
+                    const { db, doc, writeBatch } = window.AppFirebase;
+                    const list = attendanceRecords;
+                    const batchSize = 400;
+                    
+                    setSaveStatus('saving');
+                    try {
+                        for (let i = 0; i < list.length; i += batchSize) {
+                            const batch = writeBatch(db);
+                            list.slice(i, i + batchSize).forEach(r => {
+                                batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'attendance', r.id));
+                            });
+                            await batch.commit();
+                        }
+                        setSaveStatus('success');
+                        setTimeout(() => setSaveStatus(''), 2000);
+                    } catch (e) {
+                        console.error(e);
+                        setSaveStatus('error');
+                    }
+                },
+                updateAttendance: async (did, d) => {
+                    if(isOffline){ const n=[...attendanceRecords.filter(r=>r.id!==did),{...d,id:did}]; setAttendanceRecords(n); localStorage.setItem('attendance',JSON.stringify(n)); return; }
+                    const {db,doc,setDoc,serverTimestamp} = window.AppFirebase;
+                    await withSaveStatus(setDoc(doc(db,'artifacts',appId,'public','data','attendance',did), {...d, updatedAt: serverTimestamp()}));
+                },
+                batchAttendance: async (list) => {
+                    if(isOffline) { const n = [...attendanceRecords]; list.forEach(i=>{ const idx=n.findIndex(r=>r.id===i.id); if(idx>-1)n[idx]={...i.data,id:i.id}; else n.push({...i.data,id:i.id}); }); setAttendanceRecords(n); localStorage.setItem('attendance',JSON.stringify(n)); return; }
+                    const {db,doc,writeBatch,serverTimestamp} = window.AppFirebase;
+                    const batch = writeBatch(db);
+                    list.forEach(i => batch.set(doc(db,'artifacts',appId,'public','data','attendance',i.id), {...i.data, updatedAt: serverTimestamp()}));
+                    await withSaveStatus(batch.commit());
+                },
+                toggleExcellence: async (did, d, exists) => {
+                    if(isOffline){ 
+                        let n; 
+                        if(exists) n=excellenceRecords.filter(r=>`${r.date}_${r.subject}_${r.studentId}`!==did && r.id!==did); 
+                        else n=[...excellenceRecords,{...d,id:did}]; 
+                        setExcellenceRecords(n); 
+                        localStorage.setItem('excellence',JSON.stringify(n)); 
+                        return; 
+                    }
+                    const {db,doc,setDoc,deleteDoc,serverTimestamp} = window.AppFirebase; 
+                    const ref = doc(db,'artifacts',appId,'public','data','excellence',did); 
+                    if(exists) await withSaveStatus(deleteDoc(ref)); 
+                    else await withSaveStatus(setDoc(ref, {...d, createdAt: serverTimestamp()}));
+                },
+                toggleQuizStatus: async (quiz) => {
+                    const current = quizWindows?.[quiz]?.isOpen || false;
+                    const newWindows = { ...quizWindows, [quiz]: { isOpen: !current } };
+                    setQuizWindows(newWindows);
+                    if (isOffline) { localStorage.setItem('quizWindows', JSON.stringify(newWindows)); return; }
+                    const { db, doc, setDoc } = window.AppFirebase;
+                    await withSaveStatus(setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), { quizWindows: newWindows }, { merge: true }));
+                },
+                updateNews: async (t) => {
+                    if(isOffline){ setNewsText(t); localStorage.setItem('newsText',t); return; }
+                    const {db,doc,setDoc} = window.AppFirebase; await setDoc(doc(db,'artifacts',appId,'public','data','settings','config'), {newsText:t}, {merge:true});
+                },
+                toggleExcellenceLock: async () => {
+                    const newVal = !isExcellenceLocked;
+                    setIsExcellenceLocked(newVal);
+                    if (isOffline) { localStorage.setItem('excellenceLocked', JSON.stringify(newVal)); return; }
+                    const { db, doc, setDoc } = window.AppFirebase;
+                    await withSaveStatus(setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), { excellenceLocked: newVal }, { merge: true }));
+                },
+                addTeacher: async (t) => {
+                    if(isOffline) return alert("غير متاح في الوضع المحلي");
+                    const {db,doc,setDoc,serverTimestamp} = window.AppFirebase; 
+                    await withSaveStatus(setDoc(doc(db,'artifacts',appId,'public','data','teachers', t.id), {...t, createdAt: serverTimestamp()}));
+                },
+                batchAddTeachers: async (list) => {
+                    if(isOffline) return alert("غير متاح في الوضع المحلي");
+                    const {db,doc,writeBatch,serverTimestamp} = window.AppFirebase;
+                    const batch = writeBatch(db);
+                    list.forEach(t => {
+                        batch.set(doc(db,'artifacts',appId,'public','data','teachers', t.id), {
+                            id: t.id,
+                            name: t.name,
+                            createdAt: serverTimestamp()
+                        });
+                    });
+                    await withSaveStatus(batch.commit());
+                },
+                deleteTeacher: async (id) => {
+                    if(isOffline) return;
+                    const {db,doc,deleteDoc} = window.AppFirebase; 
+                    await withSaveStatus(deleteDoc(doc(db,'artifacts',appId,'public','data','teachers', id)));
+                },
+                batchDeleteTeachers: async (list) => {
+                     if(isOffline) return;
+                     const {db,doc,writeBatch} = window.AppFirebase;
+                     const batch = writeBatch(db);
+                     list.forEach(t => batch.delete(doc(db,'artifacts',appId,'public','data','teachers', t.id)));
+                     await withSaveStatus(batch.commit());
+                }
+            };
+
+            if (!firebaseReady || (user && loading)) return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500 gap-3"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div><span>جاري التحميل...</span></div>;
+
+            if (!userRole) return <>{authError && <div className="bg-amber-100 p-2 text-center text-xs font-bold">{authError}</div>}<LoginScreen onLogin={handleLogin} onTeacherLogin={handleTeacherLogin} newsText={newsText}/></>;
+
+            // إضافة كلاسات لضمان عدم تأثير الـ flex والـ overflow على الطباعة
+            return (
+                <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans print:block print:h-auto print:overflow-visible print:bg-white" dir="rtl">
+                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole} onLogout={handleLogout} dbError={dbError} studentsCount={students.length} />
+                    <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen relative flex flex-col print:h-auto print:overflow-visible print:block print:p-0">
+                        <div className="absolute top-4 left-4 z-50 flex gap-2 print:hidden">
+                            {saveStatus === 'saving' && <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse"><Icon name="UploadCloud" size={14}/> جاري الحفظ...</span>}
+                            {saveStatus === 'success' && <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><Icon name="CheckCircle" size={14}/> تم الحفظ بنجاح</span>}
+                            {saveStatus === 'error' && <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><Icon name="XCircle" size={14}/> فشل الحفظ</span>}
+                        </div>
+
+                        {authError && <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-sm font-bold print:hidden">{authError}</div>}
+                        {dbError && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm font-bold print:hidden">{dbError}</div>}
+                        
+                        <NewsTicker text={newsText} />
+                        <div className="max-w-6xl mx-auto flex-1 w-full mt-4 print:mt-0 print:max-w-none">
+                            {activeTab === 'dashboard' && userRole === 'admin' && <DashboardView students={students} attendanceRecords={attendanceRecords} newsText={newsText} actions={actions} isExcellenceLocked={isExcellenceLocked} quizWindows={quizWindows} />}
+                            {activeTab === 'students' && userRole === 'admin' && <StudentsView students={students} actions={actions} />} 
+                            {activeTab === 'attendance' && <AttendanceView students={students} attendanceRecords={attendanceRecords} userRole={userRole} teacherState={teacherState} setTeacherState={setTeacherState} actions={actions} />}
+                            {activeTab === 'excellence' && <ExcellenceView students={students} userRole={userRole} teacherState={teacherState} setTeacherState={setTeacherState} excellenceRecords={excellenceRecords} actions={actions} isExcellenceLocked={isExcellenceLocked} quizWindows={quizWindows} />}
+                            {activeTab === 'reports' && userRole === 'admin' && <ReportsView students={students} attendanceRecords={attendanceRecords} excellenceRecords={excellenceRecords} />}
+                            {activeTab === 'teachers' && userRole === 'admin' && <TeachersManagerView teachers={teachers} actions={actions} />}
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SchoolAttendanceApp />);
+    </script>
+</body>
+</html>
